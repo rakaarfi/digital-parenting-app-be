@@ -304,9 +304,9 @@ Consistent code style and quality are maintained using standard Go tools and `go
         This will use the configuration file `.golangci.yml` (if present) or default settings. Consider creating a `.golangci.yml` for project-specific rules.
 
 
-## Testing 
+<!-- ## Testing -->
 
-*(TODO: Add instructions on how to run unit or integration tests if you implement them)*
+<!-- *(TODO: Add instructions on how to run unit or integration tests if you implement them)* -->
 
 ## Contributing 
 
@@ -315,4 +315,3 @@ Contributions are welcome! Please create an Issue or Pull Request.
 ## License 
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-```
