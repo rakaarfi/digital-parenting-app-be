@@ -8,20 +8,21 @@ Backend API for a Digital Parenting application enabling parents to assign tasks
 ## Table of Contents
 
 - [Short Description](#short-description)
-- [Key Features](#key-features-)
-- [Technology Stack](#technology-stack-)
-- [Prerequisites](#prerequisites-)
-- [Installation & Setup](#installation--setup-️)
-- [Running the Application](#running-the-application-️)
-- [API Documentation (Swagger)](#api-documentation-swagger-)
-- [API Endpoints Overview](#api-endpoints-overview-)
-- [Database Migrations](#database-migrations-)
-- [Project Structure (Overview)](#project-structure-overview-)
-- [Building the Application](#building-the-application-)
-- [Linting & Formatting](#linting--formatting-)
-- [Testing](#testing-)
-- [Contributing](#contributing-)
-- [License](#license-)
+- [Key Features ✨](#key-features-✨)
+- [Technology Stack](#technology-stack)
+- [Prerequisites](#prerequisites)
+- [Installation & Setup ⚙️](#installation--setup-️)
+- [Running the Application ▶️](#running-the-application-▶️)
+- [API Documentation (Swagger)](#api-documentation-swagger)
+- [API Endpoints Overview](#api-endpoints-overview)
+- [Database Migrations](#database-migrations)
+- [Project Structure (Overview)](#project-structure-overview)
+- [Building the Application](#building-the-application)
+- [Linting & Formatting](#linting--formatting)
+- [Testing](#testing)
+- [Contributing](#contributing)
+- [License](#license)
+
 
 ## Short Description
 
