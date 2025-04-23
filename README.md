@@ -12,7 +12,7 @@ Backend API for a Digital Parenting application enabling parents to assign tasks
 - [Technology Stack](#technology-stack)
 - [Prerequisites](#prerequisites)
 - [Installation & Setup ⚙️](#installation--setup-️)
-- [Running the Application ▶️](#running-the-application-)
+- [Running the Application ▶️](#running-the-application)
 - [API Documentation (Swagger)](#api-documentation-swagger)
 - [API Endpoints Overview](#api-endpoints-overview)
 - [Database Migrations](#database-migrations)
