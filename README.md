@@ -1,4 +1,3 @@
-```markdown
 # Digital Parenting App - Backend API (Child Reward System)
 
 [![Go Version](https://img.shields.io/github/go-mod/go-version/rakaarfi/digital-parenting-app-be?style=flat-square)](https://golang.org)
