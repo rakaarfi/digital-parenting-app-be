@@ -1,0 +1,64 @@
+# docker-compose.yml
+version: '3.8'
+
+services:
+  # PostgreSQL Database Service
+  db:
+    image: postgres:15-alpine # Use a specific version, alpine is smaller
+    container_name: digital_parenting_db_dev
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres} # Use host env var or default
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-your_secret_password} # Use host env var or default
+      POSTGRES_DB: ${DB_NAME:-digital_parenting_db} # Use host env var or default
+    volumes:
+      - postgres_data:/var/lib/postgresql/data # Persist data
+    ports:
+      - "${DB_PORT_HOST:-5433}:5432" # Map container 5432 to host 5433 (or override with DB_PORT_HOST)
+    networks:
+      - app-network
+    restart: unless-stopped
+    healthcheck:
+        test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-digital_parenting_db}"]
+        interval: 10s
+        timeout: 5s
+        retries: 5
+        start_period: 10s
+
+  # Go Application Service
+  app:
+    container_name: digital_parenting_app_dev
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "${APP_PORT:-3001}:3001" # Map container 3001 to host 3001 (or override with APP_PORT)
+    environment:
+      # --- Pass necessary environment variables ---
+      APP_PORT: 3001 # Port *inside* the container
+      # --- Database connection details ---
+      # IMPORTANT: DB_HOST is the service name 'db' defined above
+      DB_HOST: db
+      DB_PORT: 5432 # Default PostgreSQL port inside the container network
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-your_secret_password}
+      DB_NAME: ${DB_NAME:-digital_parenting_db}
+      DB_SSLMODE: ${DB_SSLMODE:-disable}
+      # --- Other variables ---
+      JWT_SECRET: ${JWT_SECRET:?err_jwt_secret_must_be_set} # Require JWT_SECRET to be set on host
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      # Pass other LOG_* vars if needed
+    networks:
+      - app-network
+    depends_on:
+      db:
+        condition: service_healthy # Wait for db healthcheck to pass
+    restart: unless-stopped
+
+# Define named volume for data persistence
+volumes:
+  postgres_data: {}
+
+# Define custom network
+networks:
+  app-network:
+    driver: bridge

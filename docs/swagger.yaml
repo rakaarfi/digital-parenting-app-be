@@ -1,0 +1,1945 @@
+basePath: /api/v1
+definitions:
+  models.AddChildInput:
+    properties:
+      identifier:
+        description: Bisa username atau email anak
+        type: string
+    required:
+    - identifier
+    type: object
+  models.AdjustPointsInput:
+    properties:
+      change_amount:
+        description: Harus ada, tidak boleh 0
+        type: integer
+      notes:
+        description: Wajib beri alasan
+        maxLength: 255
+        minLength: 3
+        type: string
+    required:
+    - change_amount
+    - notes
+    type: object
+  models.AdminUpdateUserInput:
+    properties:
+      email:
+        type: string
+      first_name:
+        type: string
+      last_name:
+        type: string
+      role_id:
+        description: Pastikan role ID > 0
+        type: integer
+      username:
+        maxLength: 100
+        minLength: 3
+        type: string
+    required:
+    - email
+    - role_id
+    - username
+    type: object
+  models.CreateChildInput:
+    properties:
+      email:
+        description: Email bisa opsional untuk anak?
+        type: string
+      first_name:
+        type: string
+      last_name:
+        type: string
+      password:
+        minLength: 6
+        type: string
+      username:
+        maxLength: 100
+        minLength: 3
+        type: string
+    required:
+    - password
+    - username
+    type: object
+  models.CreateTaskInput:
+    properties:
+      task_description:
+        type: string
+      task_name:
+        description: Sesuaikan max length jika perlu
+        maxLength: 255
+        minLength: 3
+        type: string
+      task_point:
+        type: integer
+    required:
+    - task_name
+    - task_point
+    type: object
+  models.LoginUserInput:
+    properties:
+      password:
+        type: string
+      username:
+        type: string
+    required:
+    - password
+    - username
+    type: object
+  models.RegisterUserInput:
+    properties:
+      email:
+        type: string
+      first_name:
+        type: string
+      last_name:
+        type: string
+      password:
+        minLength: 6
+        type: string
+      role_id:
+        type: integer
+      username:
+        maxLength: 100
+        minLength: 3
+        type: string
+    required:
+    - email
+    - password
+    - role_id
+    - username
+    type: object
+  models.Response:
+    properties:
+      data: {}
+      message:
+        type: string
+      success:
+        type: boolean
+    type: object
+  models.Reward:
+    properties:
+      created_at:
+        type: string
+      created_by_user_id:
+        type: integer
+      id:
+        type: integer
+      reward_description:
+        type: string
+      reward_name:
+        maxLength: 100
+        minLength: 3
+        type: string
+      reward_point:
+        type: integer
+      updated_at:
+        type: string
+      user:
+        $ref: '#/definitions/models.User'
+    required:
+    - created_by_user_id
+    - reward_name
+    - reward_point
+    type: object
+  models.Role:
+    properties:
+      created_at:
+        type: string
+      id:
+        type: integer
+      name:
+        maxLength: 50
+        minLength: 3
+        type: string
+      updated_at:
+        type: string
+    required:
+    - name
+    type: object
+  models.Task:
+    properties:
+      created_at:
+        type: string
+      created_by_user_id:
+        type: integer
+      id:
+        type: integer
+      task_description:
+        type: string
+      task_name:
+        maxLength: 100
+        minLength: 3
+        type: string
+      task_point:
+        type: integer
+      updated_at:
+        type: string
+      user:
+        $ref: '#/definitions/models.User'
+    required:
+    - created_by_user_id
+    - task_name
+    - task_point
+    type: object
+  models.UpdatePasswordInput:
+    properties:
+      new_password:
+        minLength: 6
+        type: string
+      old_password:
+        minLength: 6
+        type: string
+    required:
+    - new_password
+    - old_password
+    type: object
+  models.UpdateProfileInput:
+    properties:
+      email:
+        type: string
+      first_name:
+        type: string
+      last_name:
+        type: string
+      username:
+        maxLength: 100
+        minLength: 3
+        type: string
+    required:
+    - email
+    - username
+    type: object
+  models.User:
+    properties:
+      created_at:
+        type: string
+      email:
+        type: string
+      first_name:
+        type: string
+      id:
+        type: integer
+      last_name:
+        type: string
+      role:
+        $ref: '#/definitions/models.Role'
+      role_id:
+        type: integer
+      updated_at:
+        type: string
+      username:
+        maxLength: 100
+        minLength: 3
+        type: string
+    required:
+    - email
+    - role_id
+    - username
+    type: object
+  utils.PaginatedResponseGeneric:
+    properties:
+      data:
+        description: Menggunakan interface{} untuk mewakili data apa pun
+        items: {}
+        type: array
+      message:
+        type: string
+      meta:
+        $ref: '#/definitions/utils.PaginationMeta'
+      success:
+        type: boolean
+    type: object
+  utils.PaginationMeta:
+    properties:
+      current_page:
+        description: Halaman saat ini.
+        type: integer
+      per_page:
+        description: Jumlah item per halaman yang digunakan (limit).
+        type: integer
+      total_items:
+        description: Total jumlah item di semua halaman.
+        type: integer
+      total_pages:
+        description: Total jumlah halaman yang tersedia.
+        type: integer
+    type: object
+host: localhost:3001
+info:
+  contact:
+    email: support@swagger.io
+    name: API Support
+    url: http://www.swagger.io/support
+  description: API backend for digital parenting application.
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  termsOfService: http://swagger.io/terms/
+  title: Digital Parenting App BE API
+  version: "1.0"
+paths:
+  /admin/roles:
+    get:
+      consumes:
+      - application/json
+      description: Retrieves all available roles and their respective IDs.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Roles retrieved successfully
+          schema:
+            allOf:
+            - $ref: '#/definitions/models.Response'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/models.Role'
+                  type: array
+              type: object
+        "500":
+          description: Internal server error during role retrieval
+          schema:
+            $ref: '#/definitions/models.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: Get all roles
+      tags:
+      - Admin - Roles Management
+    post:
+      consumes:
+      - application/json
+      description: Creates a new role and returns the ID of the created role.
+      parameters:
+      - description: Role details
+        in: body
+        name: create_role
+        required: true
+        schema:
+          $ref: '#/definitions/models.Role'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Role created successfully, returns role ID
+          schema:
+            allOf:
+            - $ref: '#/definitions/models.Response'
+            - properties:
+                data:
+                  type: integer
+              type: object
+        "400":
+          description: Validation failed or invalid request body
+          schema:
+            $ref: '#/definitions/models.Response'
+        "409":
+          description: Role with same name already exists
+          schema:
+            $ref: '#/definitions/models.Response'
+        "500":
+          description: Internal server error during role creation
+          schema:
+            $ref: '#/definitions/models.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: Create new role
+      tags:
+      - Admin - Roles Management
+  /admin/roles/{roleId}:
+    delete:
+      consumes:
+      - application/json
+      description: Deletes an existing role by its ID. Cannot delete base roles (Admin/Employee).
+      parameters:
+      - description: Role ID
+        in: path
+        name: roleId
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Role deleted successfully
+          schema:
+            $ref: '#/definitions/models.Response'
+        "400":
+          description: Invalid Role ID parameter
+          schema:
+            $ref: '#/definitions/models.Response'
+        "403":
+          description: Cannot delete base roles (Admin/Employee)
+          schema:
+            $ref: '#/definitions/models.Response'
+        "404":
+          description: Role not found
+          schema:
+            $ref: '#/definitions/models.Response'
+        "500":
+          description: Internal server error during role deletion
+          schema:
+            $ref: '#/definitions/models.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: Delete role
+      tags:
+      - Admin - Roles Management
+    get:
+      consumes:
+      - application/json
+      description: Retrieves a role by its ID.
+      parameters:
+      - description: Role ID
+        in: path
+        name: roleId
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Role retrieved successfully
+          schema:
+            allOf:
+            - $ref: '#/definitions/models.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.Role'
+              type: object
+        "400":
+          description: Invalid Role ID parameter
+          schema:
+            $ref: '#/definitions/models.Response'
+        "404":
+          description: Role not found
+          schema:
+            $ref: '#/definitions/models.Response'
+        "500":
+          description: Internal server error during role retrieval
+          schema:
+            $ref: '#/definitions/models.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: Get role by ID
+      tags:
+      - Admin - Roles Management
+    patch:
+      consumes:
+      - application/json
+      description: Updates an existing role by its ID.
+      parameters:
+      - description: Role ID
+        in: path
+        name: roleId
+        required: true
+        type: integer
+      - description: Role details
+        in: body
+        name: update_role
+        required: true
+        schema:
+          $ref: '#/definitions/models.Role'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Role updated successfully
+          schema:
+            $ref: '#/definitions/models.Response'
+        "400":
+          description: Validation failed or invalid request body
+          schema:
+            $ref: '#/definitions/models.Response'
+        "404":
+          description: Role not found
+          schema:
+            $ref: '#/definitions/models.Response'
+        "500":
+          description: Internal server error during role update
+          schema:
+            $ref: '#/definitions/models.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: Update role
+      tags:
+      - Admin - Roles Management
+  /admin/users:
+    get:
+      consumes:
+      - application/json
+      description: Retrieves a paginated list of all users. Requires Admin role.
+      parameters:
+      - default: 1
+        description: Page number for pagination
+        in: query
+        name: page
+        type: integer
+      - default: 10
+        description: Number of items per page
+        in: query
+        maximum: 100
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Successfully retrieved users with pagination metadata
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Invalid query parameters
+          schema:
+            $ref: '#/definitions/models.Response'
+        "401":
+          description: Unauthorized (Invalid or missing token)
+          schema:
+            $ref: '#/definitions/models.Response'
+        "403":
+          description: Forbidden (User is not an Admin)
+          schema:
+            $ref: '#/definitions/models.Response'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/models.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: Get All Users (Admin)
+      tags:
+      - Admin - Users Management
+  /admin/users/{userId}:
+    delete:
+      consumes:
+      - application/json
+      description: Deletes a specific user by ID. Requires Admin role. Admin cannot
+        delete themselves.
+      parameters:
+      - description: User ID to delete
+        in: path
+        name: userId
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: User deleted successfully
+          schema:
+            $ref: '#/definitions/models.Response'
+        "400":
+          description: Invalid User ID parameter
+          schema:
+            $ref: '#/definitions/models.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/models.Response'
+        "403":
+          description: Forbidden (Not Admin or attempting self-delete)
+          schema:
+            $ref: '#/definitions/models.Response'
+        "404":
+          description: User not found
+          schema:
+            $ref: '#/definitions/models.Response'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/models.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: Delete User (Admin)
+      tags:
+      - Admin - Users Management
+    get:
+      consumes:
+      - application/json
+      description: Retrieves a user by its ID.
+      parameters:
+      - description: User ID
+        in: path
+        name: userId
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: User retrieved successfully
+          schema:
+            allOf:
+            - $ref: '#/definitions/models.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.User'
+              type: object
+        "400":
+          description: Invalid User ID parameter
+          schema:
+            $ref: '#/definitions/models.Response'
+        "404":
+          description: User not found
+          schema:
+            $ref: '#/definitions/models.Response'
+        "500":
+          description: Internal server error during user retrieval
+          schema:
+            $ref: '#/definitions/models.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: Get user by ID
+      tags:
+      - Admin - Users Management
+    patch:
+      consumes:
+      - application/json
+      description: Updates an existing user by its ID.
+      parameters:
+      - description: User ID
+        in: path
+        name: userId
+        required: true
+        type: integer
+      - description: User details
+        in: body
+        name: update_user
+        required: true
+        schema:
+          $ref: '#/definitions/models.AdminUpdateUserInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: User updated successfully
+          schema:
+            $ref: '#/definitions/models.Response'
+        "400":
+          description: Validation failed or invalid request body
+          schema:
+            $ref: '#/definitions/models.Response'
+        "404":
+          description: User not found
+          schema:
+            $ref: '#/definitions/models.Response'
+        "500":
+          description: Internal server error during user update
+          schema:
+            $ref: '#/definitions/models.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: Update user
+      tags:
+      - Admin - Users Management
+  /auth/login:
+    post:
+      consumes:
+      - application/json
+      description: Authenticates a user and returns a JWT token upon successful login.
+      parameters:
+      - description: Login Credentials
+        in: body
+        name: login
+        required: true
+        schema:
+          $ref: '#/definitions/models.LoginUserInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Login successful, returns JWT token
+          schema:
+            allOf:
+            - $ref: '#/definitions/models.Response'
+            - properties:
+                data:
+                  additionalProperties:
+                    type: string
+                  type: object
+              type: object
+        "400":
+          description: Validation failed or invalid request body
+          schema:
+            allOf:
+            - $ref: '#/definitions/models.Response'
+            - properties:
+                data:
+                  additionalProperties:
+                    type: string
+                  type: object
+              type: object
+        "401":
+          description: Invalid username or password
+          schema:
+            $ref: '#/definitions/models.Response'
+        "500":
+          description: Internal server error during login
+          schema:
+            $ref: '#/definitions/models.Response'
+      summary: User Login
+      tags:
+      - Authentication
+  /auth/register:
+    post:
+      consumes:
+      - application/json
+      description: Creates a new user account.
+      parameters:
+      - description: User Registration Details
+        in: body
+        name: register
+        required: true
+        schema:
+          $ref: '#/definitions/models.RegisterUserInput'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: User registered successfully, returns user ID
+          schema:
+            allOf:
+            - $ref: '#/definitions/models.Response'
+            - properties:
+                data:
+                  additionalProperties:
+                    type: integer
+                  type: object
+              type: object
+        "400":
+          description: Validation failed or invalid request body
+          schema:
+            allOf:
+            - $ref: '#/definitions/models.Response'
+            - properties:
+                data:
+                  additionalProperties:
+                    type: string
+                  type: object
+              type: object
+        "409":
+          description: Username or Email already exists
+          schema:
+            $ref: '#/definitions/models.Response'
+        "500":
+          description: Internal server error during registration
+          schema:
+            $ref: '#/definitions/models.Response'
+      summary: Register New User
+      tags:
+      - Authentication
+  /child/claims:
+    get:
+      description: Retrieves the history of reward claims made by the logged-in child
+        (paginated).
+      parameters:
+      - description: Filter by status (pending, approved, rejected)
+        enum:
+        - pending
+        - approved
+        - rejected
+        in: query
+        name: status
+        type: string
+      - default: 1
+        description: Page number
+        in: query
+        name: page
+        type: integer
+      - default: 10
+        description: Items per page
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Claims history retrieved
+          schema:
+            $ref: '#/definitions/utils.PaginatedResponseGeneric'
+        "400":
+          description: Invalid query parameters
+          schema:
+            $ref: '#/definitions/models.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/models.Response'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/models.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: Get My Reward Claims History
+      tags:
+      - Child - Points & Rewards
+  /child/points:
+    get:
+      description: Retrieves the current points balance for the logged-in child.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Points balance retrieved
+          schema:
+            allOf:
+            - $ref: '#/definitions/models.Response'
+            - properties:
+                data:
+                  additionalProperties:
+                    type: integer
+                  type: object
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/models.Response'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/models.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: Get My Points Balance
+      tags:
+      - Child - Points & Rewards
+  /child/points/history:
+    get:
+      description: Retrieves the points transaction history for the logged-in child
+        (paginated).
+      parameters:
+      - default: 1
+        description: Page number
+        in: query
+        name: page
+        type: integer
+      - default: 10
+        description: Items per page
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Points history retrieved
+          schema:
+            $ref: '#/definitions/utils.PaginatedResponseGeneric'
+        "400":
+          description: Invalid query parameters
+          schema:
+            $ref: '#/definitions/models.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/models.Response'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/models.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: Get My Points History
+      tags:
+      - Child - Points & Rewards
+  /child/rewards:
+    get:
+      description: Retrieves rewards available for the logged-in child to claim.
+      parameters:
+      - default: 1
+        description: Page number
+        in: query
+        name: page
+        type: integer
+      - default: 10
+        description: Items per page
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Available rewards retrieved
+          schema:
+            $ref: '#/definitions/utils.PaginatedResponseGeneric'
+        "400":
+          description: Invalid query parameters
+          schema:
+            $ref: '#/definitions/models.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/models.Response'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/models.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: Get Available Rewards
+      tags:
+      - Child - Points & Rewards
+  /child/rewards/{rewardId}/claim:
+    post:
+      description: Submits a claim request for a specific reward by the logged-in
+        child.
+      parameters:
+      - description: Reward ID to claim
+        in: path
+        name: rewardId
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Reward claim submitted
+          schema:
+            allOf:
+            - $ref: '#/definitions/models.Response'
+            - properties:
+                data:
+                  additionalProperties:
+                    type: integer
+                  type: object
+              type: object
+        "400":
+          description: Invalid Reward ID
+          schema:
+            $ref: '#/definitions/models.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/models.Response'
+        "402":
+          description: Insufficient points" // Payment Required (402) bisa dipakai
+            di sini
+          schema:
+            $ref: '#/definitions/models.Response'
+        "404":
+          description: Reward not found
+          schema:
+            $ref: '#/definitions/models.Response'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/models.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: Claim a Reward
+      tags:
+      - Child - Points & Rewards
+  /child/tasks:
+    get:
+      description: Retrieves tasks assigned to the logged-in child, optionally filtered
+        by status.
+      parameters:
+      - description: Filter by status (assigned, submitted, approved, rejected)
+        enum:
+        - assigned
+        - submitted
+        - approved
+        - rejected
+        in: query
+        name: status
+        type: string
+      - default: 1
+        description: Page number
+        in: query
+        name: page
+        type: integer
+      - default: 10
+        description: Items per page
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Tasks retrieved
+          schema:
+            $ref: '#/definitions/utils.PaginatedResponseGeneric'
+        "400":
+          description: Invalid query parameters
+          schema:
+            $ref: '#/definitions/models.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/models.Response'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/models.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: Get My Tasks
+      tags:
+      - Child - Tasks
+  /child/tasks/{userTaskId}/submit:
+    patch:
+      description: Marks a specific assigned task as 'submitted' by the logged-in
+        child.
+      parameters:
+      - description: UserTask ID (the specific assignment)
+        in: path
+        name: userTaskId
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Task submitted successfully
+          schema:
+            $ref: '#/definitions/models.Response'
+        "400":
+          description: Invalid UserTask ID
+          schema:
+            $ref: '#/definitions/models.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/models.Response'
+        "403":
+          description: Forbidden (Not your task or task not assignable)
+          schema:
+            $ref: '#/definitions/models.Response'
+        "404":
+          description: Task assignment not found
+          schema:
+            $ref: '#/definitions/models.Response'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/models.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: Submit My Task
+      tags:
+      - Child - Tasks
+  /health:
+    get:
+      description: Public endpoint to verify that the API is running and responsive.
+      operationId: health-check
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Check Health
+      tags:
+      - Public
+  /parent/children:
+    get:
+      description: Retrieves a list of child user accounts associated with the logged-in
+        parent account.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Children retrieved
+          schema:
+            $ref: '#/definitions/models.Response'
+        "400":
+          description: Invalid query parameters
+          schema:
+            $ref: '#/definitions/models.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/models.Response'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/models.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: Get My Children
+      tags:
+      - Parent - Children
+    post:
+      consumes:
+      - application/json
+      description: Associates a child user account with the logged-in parent account
+        using the child's username or email.
+      parameters:
+      - description: Child Identifier (Username or Email)
+        in: body
+        name: add_child_input
+        required: true
+        schema:
+          $ref: '#/definitions/models.AddChildInput'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Child relationship added successfully
+          schema:
+            $ref: '#/definitions/models.Response'
+        "400":
+          description: Validation failed, invalid input, or attempting to add self
+          schema:
+            $ref: '#/definitions/models.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/models.Response'
+        "404":
+          description: Child user not found with the provided identifier
+          schema:
+            $ref: '#/definitions/models.Response'
+        "409":
+          description: Relationship already exists or child is not a 'Child' role
+          schema:
+            $ref: '#/definitions/models.Response'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/models.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: Add Child Relationship
+      tags:
+      - Parent - Children
+  /parent/children/{childId}:
+    delete:
+      description: Removes the association between the logged-in parent and a specific
+        child user.
+      parameters:
+      - description: Child User ID to remove relationship with
+        in: path
+        name: childId
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Child relationship removed successfully
+          schema:
+            $ref: '#/definitions/models.Response'
+        "400":
+          description: Invalid Child ID parameter
+          schema:
+            $ref: '#/definitions/models.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/models.Response'
+        "404":
+          description: Relationship not found
+          schema:
+            $ref: '#/definitions/models.Response'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/models.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: Remove Child Relationship
+      tags:
+      - Parent - Children
+  /parent/children/{childId}/points:
+    post:
+      consumes:
+      - application/json
+      description: Allows a parent to manually add or subtract points from a child's
+        balance.
+      parameters:
+      - description: Child User ID
+        in: path
+        name: childId
+        required: true
+        type: integer
+      - description: Point Adjustment Details (change_amount, notes)
+        in: body
+        name: adjust_points_input
+        required: true
+        schema:
+          $ref: '#/definitions/models.AdjustPointsInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Points adjusted successfully
+          schema:
+            $ref: '#/definitions/models.Response'
+        "400":
+          description: Invalid input, Child ID, or attempting zero adjustment
+          schema:
+            $ref: '#/definitions/models.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/models.Response'
+        "403":
+          description: Forbidden (Not parent of this child)
+          schema:
+            $ref: '#/definitions/models.Response'
+        "404":
+          description: Child user not found
+          schema:
+            $ref: '#/definitions/models.Response'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/models.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: Adjust Child Points Manually
+      tags:
+      - Parent - Points
+  /parent/children/{childId}/tasks:
+    get:
+      description: Retrieves a paginated list of tasks assigned to a specific child
+        by the logged-in parent.
+      parameters:
+      - description: Child User ID
+        in: path
+        name: childId
+        required: true
+        type: integer
+      - description: Filter by status (assigned, submitted, approved, rejected)
+        enum:
+        - assigned
+        - submitted
+        - approved
+        - rejected
+        in: query
+        name: status
+        type: string
+      - default: 1
+        description: Page number
+        in: query
+        name: page
+        type: integer
+      - default: 10
+        description: Items per page
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Tasks retrieved
+          schema:
+            $ref: '#/definitions/utils.PaginatedResponseGeneric'
+        "400":
+          description: Invalid Child ID or query parameters
+          schema:
+            $ref: '#/definitions/models.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/models.Response'
+        "403":
+          description: Forbidden (Not parent of this child)
+          schema:
+            $ref: '#/definitions/models.Response'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/models.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: Get Tasks Assigned to a Specific Child
+      tags:
+      - Parent - Tasks
+    post:
+      description: Assigns a task definition created by the logged-in parent to a
+        specific child user.
+      parameters:
+      - description: Child User ID to assign task to
+        in: path
+        name: childId
+        required: true
+        type: integer
+      - description: Task Definition ID to assign
+        in: body
+        name: task_id
+        required: true
+        schema:
+          type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Task assigned to child successfully
+          schema:
+            $ref: '#/definitions/models.Response'
+        "400":
+          description: Invalid Child ID or Task ID parameter
+          schema:
+            $ref: '#/definitions/models.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/models.Response'
+        "403":
+          description: Forbidden (Not the parent)
+          schema:
+            $ref: '#/definitions/models.Response'
+        "404":
+          description: Child user not found or task definition not found
+          schema:
+            $ref: '#/definitions/models.Response'
+        "409":
+          description: Conflict (Task is already assigned to child)
+          schema:
+            $ref: '#/definitions/models.Response'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/models.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: Assign Task to Child
+      tags:
+      - Parent - Tasks
+  /parent/children/create:
+    post:
+      consumes:
+      - application/json
+      description: Creates a new user account with 'Child' role and links it to the
+        logged-in parent.
+      parameters:
+      - description: Child Account Details (username, password, email, names)
+        in: body
+        name: create_child_input
+        required: true
+        schema:
+          $ref: '#/definitions/models.CreateChildInput'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Child account created successfully, returns child user ID
+          schema:
+            allOf:
+            - $ref: '#/definitions/models.Response'
+            - properties:
+                data:
+                  additionalProperties:
+                    type: integer
+                  type: object
+              type: object
+        "400":
+          description: Validation failed or invalid input
+          schema:
+            $ref: '#/definitions/models.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/models.Response'
+        "409":
+          description: Username or Email already exists for the child
+          schema:
+            $ref: '#/definitions/models.Response'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/models.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: Create Child Account by Parent
+      tags:
+      - Parent - Children
+  /parent/claims/{claimId}/review:
+    patch:
+      consumes:
+      - application/json
+      description: Approve or reject a reward claim submitted by a child.
+      parameters:
+      - description: UserReward Claim ID
+        in: path
+        name: claimId
+        required: true
+        type: integer
+      - description: Review Input (e.g., {\
+        in: body
+        name: review_input
+        required: true
+        schema:
+          additionalProperties:
+            type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Claim review successful
+          schema:
+            $ref: '#/definitions/models.Response'
+        "400":
+          description: Invalid input or Claim ID
+          schema:
+            $ref: '#/definitions/models.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/models.Response'
+        "403":
+          description: Forbidden (Not parent or claim not pending)
+          schema:
+            $ref: '#/definitions/models.Response'
+        "404":
+          description: Claim not found
+          schema:
+            $ref: '#/definitions/models.Response'
+        "500":
+          description: Internal server error (e.g., point update failed)
+          schema:
+            $ref: '#/definitions/models.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: Review Reward Claim
+      tags:
+      - Parent - Rewards
+  /parent/claims/pending:
+    get:
+      description: Retrieves pending reward claims from children associated with the
+        logged-in parent (paginated).
+      parameters:
+      - default: 1
+        description: Page number
+        in: query
+        name: page
+        type: integer
+      - default: 10
+        description: Items per page
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Pending claims retrieved
+          schema:
+            $ref: '#/definitions/utils.PaginatedResponseGeneric'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/models.Response'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/models.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: Get Pending Reward Claims
+      tags:
+      - Parent - Rewards
+  /parent/rewards:
+    get:
+      description: Retrieves reward definitions created by the logged-in parent (paginated).
+      parameters:
+      - default: 1
+        description: Page number
+        in: query
+        name: page
+        type: integer
+      - default: 10
+        description: Items per page
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Reward definitions retrieved
+          schema:
+            $ref: '#/definitions/utils.PaginatedResponseGeneric'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/models.Response'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/models.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: Get My Reward Definitions
+      tags:
+      - Parent - Rewards
+    post:
+      consumes:
+      - application/json
+      description: Creates a new reward template.
+      parameters:
+      - description: Reward Details (Name, Point, Description)
+        in: body
+        name: reward_input
+        required: true
+        schema:
+          $ref: '#/definitions/models.Reward'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Reward definition created
+          schema:
+            allOf:
+            - $ref: '#/definitions/models.Response'
+            - properties:
+                data:
+                  additionalProperties:
+                    type: integer
+                  type: object
+              type: object
+        "400":
+          description: Validation failed
+          schema:
+            $ref: '#/definitions/models.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/models.Response'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/models.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: Create Reward Definition
+      tags:
+      - Parent - Rewards
+  /parent/rewards/{rewardId}:
+    delete:
+      description: Deletes a reward definition created by the logged-in parent. Fails
+        if reward claimed/pending.
+      parameters:
+      - description: Reward Definition ID
+        in: path
+        name: rewardId
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Reward definition deleted
+          schema:
+            $ref: '#/definitions/models.Response'
+        "400":
+          description: Invalid Reward ID
+          schema:
+            $ref: '#/definitions/models.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/models.Response'
+        "403":
+          description: Forbidden (Not the owner)
+          schema:
+            $ref: '#/definitions/models.Response'
+        "404":
+          description: Reward definition not found
+          schema:
+            $ref: '#/definitions/models.Response'
+        "409":
+          description: Conflict (Reward has been claimed)
+          schema:
+            $ref: '#/definitions/models.Response'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/models.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: Delete My Reward Definition
+      tags:
+      - Parent - Rewards
+    patch:
+      consumes:
+      - application/json
+      description: Updates a reward definition created by the logged-in parent.
+      parameters:
+      - description: Reward Definition ID
+        in: path
+        name: rewardId
+        required: true
+        type: integer
+      - description: Updated Reward Details
+        in: body
+        name: reward_input
+        required: true
+        schema:
+          $ref: '#/definitions/models.Reward'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Reward definition updated
+          schema:
+            $ref: '#/definitions/models.Response'
+        "400":
+          description: Invalid input or Reward ID
+          schema:
+            $ref: '#/definitions/models.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/models.Response'
+        "403":
+          description: Forbidden (Not the owner)
+          schema:
+            $ref: '#/definitions/models.Response'
+        "404":
+          description: Reward definition not found
+          schema:
+            $ref: '#/definitions/models.Response'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/models.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: Update My Reward Definition
+      tags:
+      - Parent - Rewards
+  /parent/tasks:
+    get:
+      description: Retrieves a paginated list of task definitions created by the logged-in
+        parent.
+      parameters:
+      - default: 1
+        description: Page number
+        in: query
+        name: page
+        type: integer
+      - default: 10
+        description: Items per page
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Task definitions retrieved
+          schema:
+            $ref: '#/definitions/utils.PaginatedResponseGeneric'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/models.Response'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/models.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: Get My Task Definitions
+      tags:
+      - Parent - Tasks
+    post:
+      consumes:
+      - application/json
+      description: Creates a new task definition that can be assigned to children.
+      parameters:
+      - description: Task Definition Input
+        in: body
+        name: input
+        required: true
+        schema:
+          $ref: '#/definitions/models.CreateTaskInput'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Task definition created successfully
+          schema:
+            allOf:
+            - $ref: '#/definitions/models.Response'
+            - properties:
+                data:
+                  additionalProperties:
+                    type: integer
+                  type: object
+              type: object
+        "400":
+          description: Invalid request body
+          schema:
+            $ref: '#/definitions/models.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/models.Response'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/models.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: Create a new Task Definition
+      tags:
+      - Parent - Task Management
+  /parent/tasks/{taskId}:
+    delete:
+      description: Deletes a task definition created by the logged-in parent. Fails
+        if task is assigned.
+      parameters:
+      - description: Task Definition ID
+        in: path
+        name: taskId
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Task definition deleted
+          schema:
+            $ref: '#/definitions/models.Response'
+        "400":
+          description: Invalid Task ID
+          schema:
+            $ref: '#/definitions/models.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/models.Response'
+        "403":
+          description: Forbidden (Not the owner)
+          schema:
+            $ref: '#/definitions/models.Response'
+        "404":
+          description: Task definition not found
+          schema:
+            $ref: '#/definitions/models.Response'
+        "409":
+          description: Conflict (Task is currently assigned)
+          schema:
+            $ref: '#/definitions/models.Response'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/models.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: Delete My Task Definition
+      tags:
+      - Parent - Tasks
+    patch:
+      consumes:
+      - application/json
+      description: Updates a task definition created by the logged-in parent.
+      parameters:
+      - description: Task Definition ID
+        in: path
+        name: taskId
+        required: true
+        type: integer
+      - description: Updated Task Details (Name, Point, Description)
+        in: body
+        name: task_input
+        required: true
+        schema:
+          $ref: '#/definitions/models.Task'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Task definition updated
+          schema:
+            $ref: '#/definitions/models.Response'
+        "400":
+          description: Invalid input or Task ID
+          schema:
+            $ref: '#/definitions/models.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/models.Response'
+        "403":
+          description: Forbidden (Not the owner of the task)
+          schema:
+            $ref: '#/definitions/models.Response'
+        "404":
+          description: Task definition not found
+          schema:
+            $ref: '#/definitions/models.Response'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/models.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: Update My Task Definition
+      tags:
+      - Parent - Tasks
+  /parent/tasks/{userTaskId}/verify:
+    patch:
+      description: Verifies a task submitted by a child, approving or rejecting it
+        as a parent.
+      parameters:
+      - description: UserTask ID to verify
+        in: path
+        name: userTaskId
+        required: true
+        type: integer
+      - description: New status for the task (approved or rejected)
+        in: body
+        name: status
+        required: true
+        schema:
+          type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Task verified successfully
+          schema:
+            $ref: '#/definitions/models.Response'
+        "400":
+          description: Invalid UserTask ID or status
+          schema:
+            $ref: '#/definitions/models.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/models.Response'
+        "403":
+          description: Forbidden (Not authorized to verify this task)
+          schema:
+            $ref: '#/definitions/models.Response'
+        "404":
+          description: Task not found
+          schema:
+            $ref: '#/definitions/models.Response'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/models.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: Verify Submitted Task
+      tags:
+      - Parent - Tasks
+  /user/password:
+    patch:
+      consumes:
+      - application/json
+      description: Updates the current user's password.
+      parameters:
+      - description: Password Update Details
+        in: body
+        name: update_password
+        required: true
+        schema:
+          $ref: '#/definitions/models.UpdatePasswordInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Password updated successfully
+          schema:
+            $ref: '#/definitions/models.Response'
+        "400":
+          description: Validation failed or invalid request body
+          schema:
+            $ref: '#/definitions/models.Response'
+        "401":
+          description: Invalid old password
+          schema:
+            $ref: '#/definitions/models.Response'
+        "500":
+          description: Internal server error during password update
+          schema:
+            $ref: '#/definitions/models.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: Update My Password
+      tags:
+      - User - Profile Management
+  /user/profile:
+    get:
+      description: Get the profile for the current user.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Profile data for current user
+          schema:
+            allOf:
+            - $ref: '#/definitions/models.Response'
+            - properties:
+                data:
+                  additionalProperties: true
+                  type: object
+              type: object
+        "400":
+          description: Validation failed or invalid request body
+          schema:
+            $ref: '#/definitions/models.Response'
+        "401":
+          description: Failed to identify user
+          schema:
+            $ref: '#/definitions/models.Response'
+        "500":
+          description: Internal server error during profile retrieval
+          schema:
+            $ref: '#/definitions/models.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: Get my profile
+      tags:
+      - User - Profile Management
+    patch:
+      consumes:
+      - application/json
+      description: Update the profile for the current user.
+      parameters:
+      - description: Profile update information
+        in: body
+        name: update_profile_input
+        required: true
+        schema:
+          $ref: '#/definitions/models.UpdateProfileInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Profile updated successfully
+          schema:
+            $ref: '#/definitions/models.Response'
+        "400":
+          description: Validation failed or invalid request body
+          schema:
+            $ref: '#/definitions/models.Response'
+        "401":
+          description: Failed to identify user
+          schema:
+            $ref: '#/definitions/models.Response'
+        "500":
+          description: Internal server error during profile update
+          schema:
+            $ref: '#/definitions/models.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: Update my profile
+      tags:
+      - User - Profile Management
+securityDefinitions:
+  ApiKeyAuth:
+    description: '"Type ''Bearer YOUR_JWT_TOKEN'' into the value field."'
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"
