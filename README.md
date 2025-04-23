@@ -18,8 +18,7 @@ Backend API for a Digital Parenting application enabling parents to assign tasks
 - [Database Migrations](#database-migrations)
 - [Project Structure (Overview)](#project-structure-overview)
 - [Building the Application](#building-the-application)
-- [Linting & Formatting](#linting--formatting)
-- [Testing](#testing)
+- [Linting & Formatting](#linting--formatting) <!-- - [Testing](#testing) -->
 - [Contributing](#contributing)
 - [License](#license)
 
