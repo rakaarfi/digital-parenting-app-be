@@ -1,5 +1,13 @@
 basePath: /api/v1
 definitions:
+  models.AcceptInvitationInput:
+    properties:
+      invitation_code:
+        description: Validasi panjang sesuai DB
+        type: string
+    required:
+    - invitation_code
+    type: object
   models.AddChildInput:
     properties:
       identifier:
@@ -37,10 +45,6 @@ definitions:
         maxLength: 100
         minLength: 3
         type: string
-    required:
-    - email
-    - role_id
-    - username
     type: object
   models.CreateChildInput:
     properties:
@@ -352,7 +356,7 @@ paths:
     delete:
       consumes:
       - application/json
-      description: Deletes an existing role by its ID. Cannot delete base roles (Admin/Employee).
+      description: Deletes an existing role by its ID. Cannot delete base roles (Admin/Child).
       parameters:
       - description: Role ID
         in: path
@@ -371,7 +375,7 @@ paths:
           schema:
             $ref: '#/definitions/models.Response'
         "403":
-          description: Cannot delete base roles (Admin/Employee)
+          description: Cannot delete base roles (Admin/Child)
           schema:
             $ref: '#/definitions/models.Response'
         "404":
@@ -1151,6 +1155,55 @@ paths:
       summary: Remove Child Relationship
       tags:
       - Parent - Children
+  /parent/children/{childId}/invitations:
+    post:
+      description: Creates a unique, time-limited invitation code for a specific child
+        linked to the parent.
+      parameters:
+      - description: Child User ID to generate code for
+        in: path
+        name: childId
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Invitation code generated successfully
+          schema:
+            allOf:
+            - $ref: '#/definitions/models.Response'
+            - properties:
+                data:
+                  additionalProperties:
+                    type: string
+                  type: object
+              type: object
+        "400":
+          description: Invalid Child ID
+          schema:
+            $ref: '#/definitions/models.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/models.Response'
+        "403":
+          description: Forbidden (Not the parent of this child)
+          schema:
+            $ref: '#/definitions/models.Response'
+        "404":
+          description: Child user not found
+          schema:
+            $ref: '#/definitions/models.Response'
+        "500":
+          description: Internal server error (code generation/storage failed)
+          schema:
+            $ref: '#/definitions/models.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: Generate Invitation Code for Child
+      tags:
+      - Parent - Children Invitations
   /parent/children/{childId}/points:
     post:
       consumes:
@@ -1443,6 +1496,51 @@ paths:
       summary: Get Pending Reward Claims
       tags:
       - Parent - Rewards
+  /parent/join-child:
+    post:
+      consumes:
+      - application/json
+      description: Allows a logged-in parent to establish a relationship with a child
+        using a valid invitation code.
+      parameters:
+      - description: Invitation Code
+        in: body
+        name: join_input
+        required: true
+        schema:
+          $ref: '#/definitions/models.AcceptInvitationInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Successfully joined child using invitation code
+          schema:
+            $ref: '#/definitions/models.Response'
+        "400":
+          description: Validation failed or invalid input body
+          schema:
+            $ref: '#/definitions/models.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/models.Response'
+        "403":
+          description: Forbidden (e.g., already parent, user not a Parent role)
+          schema:
+            $ref: '#/definitions/models.Response'
+        "404":
+          description: Invalid, expired, or used invitation code
+          schema:
+            $ref: '#/definitions/models.Response'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/models.Response'
+      security:
+      - ApiKeyAuth: []
+      summary: Join Child via Invitation Code
+      tags:
+      - Parent - Children Invitations
   /parent/rewards:
     get:
       description: Retrieves reward definitions created by the logged-in parent (paginated).

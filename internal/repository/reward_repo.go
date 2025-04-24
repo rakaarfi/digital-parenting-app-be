@@ -51,37 +51,20 @@ func (r *rewardRepo) CreateReward(ctx context.Context, reward *models.Reward) (i
 }
 
 // GetRewardByID (Family Visibility Implementation)
-// Mengambil detail reward jika parentID adalah pembuat ATAU parentID punya anak yang sama
-// dengan parent pembuat reward.
-func (r *rewardRepo) GetRewardByID(ctx context.Context, id int, requestingParentID int) (*models.Reward, error) {
-	// Query ini sedikit lebih kompleks:
-	// 1. Ambil reward berdasarkan ID.
-	// 2. Cek apakah requestingParentID adalah pembuatnya.
-	// 3. Jika bukan, cek apakah ada anak yang sama antara requestingParentID dan pembuat reward.
+// GetRewardByID hanya mengambil berdasarkan ID, tanpa validasi ownership/family.
+// Validasi akses dilakukan di Handler/Service.
+func (r *rewardRepo) GetRewardByID(ctx context.Context, id int) (*models.Reward, error) {
 	query := `
         SELECT
-            rw.id, rw.reward_name, rw.reward_point, rw.reward_description,
-            rw.created_by_user_id, rw.created_at, rw.updated_at
-        FROM rewards rw
-        WHERE rw.id = $1
-        AND (
-            -- Opsi 1: Requesting parent adalah pembuatnya
-            rw.created_by_user_id = $2
-            OR
-            -- Opsi 2: Ada anak yang sama antara requesting parent dan creator
-            EXISTS (
-                SELECT 1
-                FROM user_relationship ur1
-                JOIN user_relationship ur2 ON ur1.child_id = ur2.child_id
-                WHERE ur1.parent_id = $2 -- requesting parent
-                  AND ur2.parent_id = rw.created_by_user_id -- creator
-            )
-        )
+            id, reward_name, reward_point, reward_description,
+            created_by_user_id, created_at, updated_at
+        FROM rewards
+        WHERE id = $1
     `
 	reward := &models.Reward{}
 	var description sql.NullString
 
-	err := r.db.QueryRow(ctx, query, id, requestingParentID).Scan(
+	err := r.db.QueryRow(ctx, query, id).Scan(
 		&reward.ID,
 		&reward.RewardName,
 		&reward.RewardPoint,
@@ -93,12 +76,12 @@ func (r *rewardRepo) GetRewardByID(ctx context.Context, id int, requestingParent
 
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			zlog.Warn().Int("reward_id", id).Int("requesting_parent_id", requestingParentID).Msg("Reward definition not found or access denied for parent")
+			zlog.Warn().Int("reward_id", id).Msg("Reward definition not found by ID")
 			// Kembalikan ErrNoRows agar handler tahu tidak ditemukan / tidak berhak
 			return nil, pgx.ErrNoRows
 		}
 		// Error umum
-		zlog.Error().Err(err).Int("reward_id", id).Int("requesting_parent_id", requestingParentID).Msg("Error getting reward definition by ID")
+		zlog.Error().Err(err).Int("reward_id", id).Msg("Error getting reward definition by ID")
 		return nil, fmt.Errorf("error getting reward definition %d: %w", id, err)
 	}
 
@@ -336,9 +319,16 @@ func (r *rewardRepo) DeleteReward(ctx context.Context, id int, parentID int) err
 // Implementasi ini SAMA dengan GetRewardByID non-Tx karena tidak ada validasi kepemilikan parent lagi di sini,
 // validasi kepemilikan dilakukan di service layer atau handler yang memanggil (berdasarkan relasi anak-parent).
 func (r *rewardRepo) GetRewardDetailsTx(ctx context.Context, tx pgx.Tx, rewardID int) (*RewardDetails, error) {
-	query := `SELECT id, reward_point FROM rewards WHERE id = $1 FOR UPDATE` // Lock baris
+	// Tambahkan created_by_user_id ke SELECT
+	query := `SELECT id, reward_point, created_by_user_id
+              FROM rewards WHERE id = $1 FOR UPDATE` // Lock baris
 	details := &RewardDetails{}
-	err := tx.QueryRow(ctx, query, rewardID).Scan(&details.ID, &details.RequiredPoints)
+	// Tambahkan &details.CreatedByUserID ke Scan
+	err := tx.QueryRow(ctx, query, rewardID).Scan(
+        &details.ID,
+        &details.RequiredPoints,
+        &details.CreatedByUserID,
+    )
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, pgx.ErrNoRows

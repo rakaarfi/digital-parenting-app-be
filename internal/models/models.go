@@ -144,11 +144,11 @@ type LoginUserInput struct {
 }
 
 type AdminUpdateUserInput struct {
-	Username  string `json:"username" validate:"required,min=3,max=100"`
-	Email     string `json:"email" validate:"required,email"`
+	Username  string `json:"username" validate:"omitempty,min=3,max=100"`
+	Email     string `json:"email" validate:"omitempty,email"`
 	FirstName string `json:"first_name,omitempty"`
 	LastName  string `json:"last_name,omitempty"`
-	RoleID    int    `json:"role_id" validate:"required,gt=0"` // Pastikan role ID > 0
+	RoleID    int    `json:"role_id" validate:"omitempty,gt=0"` // Pastikan role ID > 0
 }
 
 type UpdateProfileInput struct {
@@ -219,4 +219,42 @@ type Response struct {
 	Success bool        `json:"success"`
 	Message string      `json:"message"`
 	Data    interface{} `json:"data,omitempty"`
+}
+
+// --- Invitation Code ---
+
+// InvitationStatus mendefinisikan status yang mungkin untuk kode undangan.
+type InvitationStatus string
+
+const (
+	InvitationStatusActive  InvitationStatus = "active"
+	InvitationStatusUsed    InvitationStatus = "used"
+	InvitationStatusExpired InvitationStatus = "expired"
+)
+
+// InvitationCode merepresentasikan data kode undangan di database.
+type InvitationCode struct {
+	ID                 int              `json:"id"`
+	Code               string           `json:"code" validate:"required,len=16"` // Validasi panjang sesuai DB
+	ChildID            int              `json:"child_id" validate:"required,gt=0"`
+	CreatedByParentID  int              `json:"created_by_parent_id" validate:"required,gt=0"`
+	Status             InvitationStatus `json:"status" validate:"required,oneof=active used expired"`
+	ExpiresAt          time.Time        `json:"expires_at" validate:"required"`
+	CreatedAt          time.Time        `json:"created_at,omitzero"`
+	UpdatedAt          time.Time        `json:"updated_at,omitzero"`
+
+	// Relasi (opsional, bisa di-preload jika perlu ditampilkan bersamaan)
+	// Child *User `json:"child,omitempty"`
+	// Creator *User `json:"creator,omitempty"`
+}
+
+// Input struct untuk membuat kode undangan (mungkin tidak perlu jika service handle)
+// type GenerateInvitationInput struct {
+//     ChildID int `json:"child_id" validate:"required,gt=0"`
+//     // Duration? Atau durasi default di service?
+// }
+
+// Input struct untuk menerima undangan (digunakan di handler JoinWithInvitationCode)
+type AcceptInvitationInput struct {
+	Code string `json:"invitation_code" validate:"required,len=10"` // Validasi panjang sesuai DB
 }

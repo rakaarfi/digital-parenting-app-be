@@ -56,6 +56,23 @@ type UserService interface {
 	// DeleteUser(ctx context.Context, userID int, requestedByID int) error // Contoh untuk nanti
 }
 
+// InvitationService defines operations related to managing invitation codes
+// for linking parents to children.
+type InvitationService interface {
+	// GenerateAndStoreCode creates a unique invitation code for a specific child,
+	// initiated by an existing parent. It stores the code and returns it.
+	// The requestingParentID is used to validate permission.
+	// Returns the generated code string or an error.
+	GenerateAndStoreCode(ctx context.Context, requestingParentID int, childID int) (string, error)
+
+	// AcceptInvitation allows a logged-in parent (joiningParentID) to use an
+	// invitation code to establish a relationship with the child linked to the code.
+	// This operation should be atomic (uses database transactions).
+	// Returns an error if the code is invalid, expired, already used,
+	// or if the relationship cannot be added.
+	AcceptInvitation(ctx context.Context, joiningParentID int, code string) error
+}
+
 // PointService defines operations related to points (bisa digabung atau terpisah).
 // type PointService interface {
 // 	AdjustPointsManual(ctx context.Context, adminOrParentID int, childID int, amount int, notes string) error

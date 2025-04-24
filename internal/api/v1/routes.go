@@ -54,29 +54,36 @@ func SetupRoutes(
 	// Rute Parent
 	// =========================================================================
 	parent := api.Group("/parent", middleware.Protected(), middleware.Authorize("Parent"))
-	// Child Management
+	// --- Child Management & Invitations ---
 	parent.Get("/children", parentHandler.GetMyChildren)
-	parent.Post("/children", parentHandler.AddChild) // Ganti atau komentari ini
-	parent.Post("/children/create", parentHandler.CreateChildAccount) // Endpoint baru untuk membuat akun anak
-	parent.Delete("/children/:childId", parentHandler.RemoveChild)
-	// Task Definition Management
+	parent.Post("/children", parentHandler.AddChild)
+	parent.Post("/children/create", parentHandler.CreateChildAccount)                   // Membuat akun anak baru
+	parent.Delete("/children/:childId", parentHandler.RemoveChild)                      // Hapus relasi dengan anak
+	parent.Post("/children/:childId/invitations", parentHandler.GenerateInvitationCode) // Generate kode untuk anak spesifik
+	parent.Post("/join-child", parentHandler.JoinWithInvitationCode)                    // Join menggunakan kode undangan
+
+	// --- Task Definition Management ---
 	parent.Post("/tasks", parentHandler.CreateTaskDefinition)
 	parent.Get("/tasks", parentHandler.GetMyTaskDefinitions) // List task buatan parent
 	parent.Patch("/tasks/:taskId", parentHandler.UpdateMyTaskDefinition)
 	parent.Delete("/tasks/:taskId", parentHandler.DeleteMyTaskDefinition)
-	// Task Assignment & Verification
+
+	// --- Task Assignment & Verification ---
 	parent.Post("/children/:childId/tasks", parentHandler.AssignTaskToChild)     // Assign task ke anak spesifik
 	parent.Get("/children/:childId/tasks", parentHandler.GetTasksForChild)       // Lihat tugas anak spesifik (filter by status?)
 	parent.Patch("/tasks/:userTaskId/verify", parentHandler.VerifySubmittedTask) // Verify tugas spesifik (berdasarkan ID UserTask)
-	// Reward Definition Management
+
+	// --- Reward Definition Management ---
 	parent.Post("/rewards", parentHandler.CreateRewardDefinition)
 	parent.Get("/rewards", parentHandler.GetMyRewardDefinitions) // List reward buatan parent
 	parent.Patch("/rewards/:rewardId", parentHandler.UpdateMyRewardDefinition)
 	parent.Delete("/rewards/:rewardId", parentHandler.DeleteMyRewardDefinition)
-	// Reward Claim Review
+
+	// --- Reward Claim Review ---
 	parent.Get("/claims/pending", parentHandler.GetPendingClaims)            // Lihat semua klaim pending dari anak-anaknya
 	parent.Patch("/claims/:claimId/review", parentHandler.ReviewRewardClaim) // Approve/reject klaim spesifik
-	// Point Adjustment
+
+	// --- Point Adjustment ---
 	parent.Post("/children/:childId/points", parentHandler.AdjustChildPoints) // Adjust poin anak
 
 	// =========================================================================

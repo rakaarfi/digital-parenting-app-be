@@ -31,9 +31,10 @@ type ParentHandler struct {
 	UserRepo       repository.UserRepository
 
 	// --- Services (untuk logika bisnis & transaksi) ---
-	TaskService   service.TaskService
-	RewardService service.RewardService
-	UserService   service.UserService
+	TaskService       service.TaskService
+	RewardService     service.RewardService
+	UserService       service.UserService
+	InvitationService service.InvitationService
 
 	Validate *validator.Validate
 }
@@ -50,19 +51,21 @@ func NewParentHandler(
 	taskService service.TaskService, // Terima TaskService
 	rewardService service.RewardService, // Terima RewardService
 	userService service.UserService,
+	invitationService service.InvitationService,
 ) *ParentHandler {
 	return &ParentHandler{
-		UserRelRepo:    userRelRepo,
-		TaskRepo:       taskRepo,
-		UserTaskRepo:   userTaskRepo,
-		RewardRepo:     rewardRepo,
-		UserRewardRepo: userRewardRepo,
-		PointRepo:      pointRepo,
-		UserRepo:       userRepo,
-		TaskService:    taskService,   // Simpan TaskService
-		RewardService:  rewardService, // Simpan RewardService
-		UserService:    userService,
-		Validate:       validator.New(),
+		UserRelRepo:       userRelRepo,
+		TaskRepo:          taskRepo,
+		UserTaskRepo:      userTaskRepo,
+		RewardRepo:        rewardRepo,
+		UserRewardRepo:    userRewardRepo,
+		PointRepo:         pointRepo,
+		UserRepo:          userRepo,
+		TaskService:       taskService,   // Simpan TaskService
+		RewardService:     rewardService, // Simpan RewardService
+		UserService:       userService,
+		InvitationService: invitationService,
+		Validate:          validator.New(),
 	}
 }
 
@@ -393,18 +396,42 @@ func (h *ParentHandler) UpdateMyTaskDefinition(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(models.Response{Success: false, Message: "Validation failed", Data: errorDetails})
 	}
 
-	task := &models.Task{
-		ID:              taskID, // Set ID dari URL
+	ctx := c.Context()
+	// --- Langkah 1: Dapatkan Task berdasarkan ID saja ---
+	existingTask, err := h.TaskRepo.GetTaskByID(ctx, taskID) // Panggil repo tanpa parentID
+	if err != nil {
+		// Jika ErrNoRows, berarti task benar-benar tidak ada -> 404
+		if errors.Is(err, pgx.ErrNoRows) {
+			zlog.Warn().Int("task_id", taskID).Msg("Handler: Task definition not found for update")
+			return c.Status(fiber.StatusNotFound).JSON(models.Response{Success: false, Message: "Task definition not found"})
+		}
+		// Error lain -> 500
+		zlog.Error().Err(err).Int("task_id", taskID).Msg("Handler: Error getting task for update check")
+		return handleParentError(c, err, "UpdateMyTaskDefinition - Get Task") // Atau 500 langsung
+	}
+
+	// --- Langkah 2: Validasi Kepemilikan Eksplisit ---
+	if existingTask.CreatedByUserID != parentID {
+		zlog.Warn().Int("task_id", taskID).Int("requesting_parent_id", parentID).Int("owner_id", existingTask.CreatedByUserID).Msg("Handler: Forbidden attempt to update task owned by another parent")
+		return c.Status(fiber.StatusForbidden).JSON(models.Response{ // <-- SEKARANG 403
+			Success: false,
+			Message: "Forbidden: You do not have permission to modify this task.",
+		})
+	}
+
+	// --- Langkah 3: Panggil Repository Update ---
+	taskToUpdate := &models.Task{
+		ID:              taskID,
 		TaskName:        input.TaskName,
 		TaskPoint:       input.TaskPoint,
 		TaskDescription: input.TaskDescription,
 	}
-
-	ctx := c.Context()
-	err = h.TaskRepo.UpdateTask(ctx, task, parentID) // Repo cek ownership
+	// Panggil UpdateTask repo (yang masih cek ownership di WHERE - ini jadi lapisan kedua)
+	err = h.TaskRepo.UpdateTask(ctx, taskToUpdate, parentID)
 	if err != nil {
-		// handleParentError akan menangani ErrNoRows (bisa jadi not found atau forbidden)
-		return handleParentError(c, err, "UpdateMyTaskDefinition")
+		// Jika error di sini NoRows, itu aneh (race condition?), tangani sebagai 500
+		zlog.Error().Err(err).Int("task_id", taskID).Msg("Handler: Error during task update after ownership check")
+		return handleParentError(c, err, "UpdateMyTaskDefinition - Update Task")
 	}
 
 	return c.Status(http.StatusOK).JSON(models.Response{Success: true, Message: "Task definition updated successfully"})
@@ -438,16 +465,43 @@ func (h *ParentHandler) DeleteMyTaskDefinition(c *fiber.Ctx) error {
 	}
 
 	ctx := c.Context()
-	err = h.TaskRepo.DeleteTask(ctx, taskID, parentID) // Repo cek ownership & FK
+
+	// 1. Get Task berdasarkan ID saja
+	existingTask, err := h.TaskRepo.GetTaskByID(ctx, taskID)
 	if err != nil {
-		// // Cek error spesifik dari repo untuk FK violation (karena RESTRICT)
-		// if strings.Contains(err.Error(), "currently assigned") || strings.Contains(err.Error(), "still referenced") {
-		// 	return c.Status(fiber.StatusConflict).JSON(models.Response{Success: false, Message: err.Error()})
-		// }
-		// handleParentError akan menangani ErrNoRows (not found/forbidden) dan error lain
-		return handleParentError(c, err, "DeleteMyTaskDefinition")
+		if errors.Is(err, pgx.ErrNoRows) {
+			zlog.Warn().Int("task_id", taskID).Msg("Handler: Task definition not found for deletion")
+			return c.Status(fiber.StatusNotFound).JSON(models.Response{Success: false, Message: "Task definition not found"})
+		}
+		return handleParentError(c, err, "DeleteMyTaskDefinition - Get Task")
 	}
 
+	// 2. Validasi Kepemilikan Eksplisit
+	if existingTask.CreatedByUserID != parentID {
+		zlog.Warn().Int("task_id", taskID).Int("requesting_parent_id", parentID).Int("owner_id", existingTask.CreatedByUserID).Msg("Handler: Forbidden attempt to delete task owned by another parent")
+		return c.Status(fiber.StatusForbidden).JSON(models.Response{
+			Success: false,
+			Message: "Forbidden: You can only delete tasks you created.",
+		})
+	}
+
+	// 3. Panggil Repository Delete
+	err = h.TaskRepo.DeleteTask(ctx, taskID, parentID) // parentID di sini sebagai konfirmasi repo (defense in depth)
+	if err != nil {
+		// Cek error spesifik dari repo untuk FK violation
+		if strings.Contains(err.Error(), "currently assigned") || strings.Contains(err.Error(), "still referenced") {
+			zlog.Warn().Err(err).Int("task_id", taskID).Msg("Handler: Conflict deleting assigned task definition")
+			return c.Status(fiber.StatusConflict).JSON(models.Response{Success: false, Message: err.Error()})
+		}
+		// Jika error NoRows di sini, berarti race condition setelah Get
+		if errors.Is(err, pgx.ErrNoRows) {
+			zlog.Warn().Int("task_id", taskID).Msg("Handler: Task definition disappeared before deletion could complete (race condition?)")
+			return c.Status(fiber.StatusNotFound).JSON(models.Response{Success: false, Message: "Task definition not found (possibly deleted already)"})
+		}
+		return handleParentError(c, err, "DeleteMyTaskDefinition - Delete Task")
+	}
+
+	zlog.Info().Int("parent_id", parentID).Int("deleted_task_id", taskID).Msg("Handler: Task definition deleted successfully")
 	return c.Status(http.StatusOK).JSON(models.Response{Success: true, Message: "Task definition deleted successfully"})
 }
 
@@ -481,8 +535,9 @@ func (h *ParentHandler) AssignTaskToChild(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(models.Response{Success: false, Message: "Invalid Child ID parameter"})
 	}
 
-	// 1. Validasi: Apakah user ini parent dari childId? (Langsung ke Repo)
 	ctx := c.Context()
+
+	// 1. Validasi: Apakah user ini parent dari childId? (Langsung ke Repo)
 	isParent, err := h.UserRelRepo.IsParentOf(ctx, parentID, childID)
 	if err != nil {
 		// handleParentError bisa menangani error internal
@@ -504,23 +559,75 @@ func (h *ParentHandler) AssignTaskToChild(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(models.Response{Success: false, Message: "Validation failed", Data: errorDetails})
 	}
 
-	// 3. (Opsional) Validasi TaskID ada dan bisa diakses oleh parent ini?
-	//    Jika menggunakan Family Visibility di GetTaskByID, ini bisa dicek
-	// _, err = h.TaskRepo.GetTaskByID(ctx, input.TaskID, parentID)
-	// if err != nil {
-	//     return handleParentError(c, err, "AssignTaskToChild - Check Task") // Handle Not Found / Forbidden
-	// }
-
-	// 4. Assign task (Langsung ke Repo)
-	userTaskID, err := h.UserTaskRepo.AssignTask(ctx, childID, input.TaskID, parentID)
+	// 3. Cek apakah Task Definition ADA
+	taskDefinition, err := h.TaskRepo.GetTaskByID(ctx, input.TaskID)
 	if err != nil {
-		// Handle FK violation (misal task_id tidak ada)
-		if strings.Contains(err.Error(), "invalid user, task, or assigner ID") {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return c.Status(fiber.StatusNotFound).JSON(models.Response{Success: false, Message: "Task definition not found"})
+		}
+		return handleParentError(c, err, "AssignTaskToChild - Get Task Definition")
+	}
+
+	// 4. Validasi Hak Akses Parent ke Task Definition (Ownership atau Shared Child)
+	canAssign := false
+	if taskDefinition.CreatedByUserID == parentID {
+		canAssign = true // Parent adalah pembuatnya
+		fmt.Println("---------------------------------------")
+	} else {
+		zlog.Debug().Int("CheckingSharedChild_Parent1", parentID).Int("CheckingSharedChild_Parent2", taskDefinition.CreatedByUserID).Msg("Calling HasSharedChild")
+		hasSharedChild, errCheckShared := h.UserRelRepo.HasSharedChild(ctx, parentID, taskDefinition.CreatedByUserID)
+		zlog.Debug().Bool("HasSharedChildResult", hasSharedChild).Err(errCheckShared).Msg("Result from HasSharedChild")
+		// Cek apakah ada anak bersama antara parent ini dan pembuat task
+		// hasSharedChild, errCheckShared := h.UserRelRepo.HasSharedChild(ctx, parentID, taskDefinition.CreatedByUserID)
+		fmt.Println("++++++++++++++++++++++++++++++++++++++++++++++")
+		if errCheckShared != nil {
+			// Error saat cek relasi keluarga, sebaiknya gagalkan
+			zlog.Error().Err(errCheckShared).Int("assigning_parent", parentID).Int("task_creator", taskDefinition.CreatedByUserID).Msg("Handler: Error checking for shared child during task assignment authorization")
+			return handleParentError(c, errCheckShared, "AssignTaskToChild - Check Shared Child")
+		}
+		if hasSharedChild {
+			fmt.Println("????????????????????????????????????????????")
+			canAssign = true // Boleh assign karena punya anak bersama
+		}
+	}
+
+	if !canAssign {
+		fmt.Println("XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX")
+		zlog.Warn().Int("parent_id", parentID).Int("task_id", input.TaskID).Int("creator_id", taskDefinition.CreatedByUserID).Msg("Handler: Parent forbidden from assigning task created by another unrelated parent")
+		return c.Status(fiber.StatusForbidden).JSON(models.Response{
+			Success: false,
+			Message: "Forbidden: You do not have permission to assign this specific task definition.",
+		})
+	}
+
+	// 5. Periksa apakah sudah ada tugas yang sama dengan status 'assigned' atau 'submitted'
+	//    Perlu metode baru di UserTaskRepository: CheckExistingActiveTask
+	activeTaskExists, errCheckActive := h.UserTaskRepo.CheckExistingActiveTask(ctx, childID, taskDefinition.ID)
+	if errCheckActive != nil {
+        // Error saat memeriksa, gagalkan request
+        zlog.Error().Err(errCheckActive).Int("child_id", childID).Int("task_id", taskDefinition.ID).Msg("Handler: Error checking for existing active task")
+        return handleParentError(c, errCheckActive, "AssignTaskToChild - Check Active Task")
+	}
+	if activeTaskExists {
+        // Jika sudah ada tugas aktif, kembalikan error Conflict
+        zlog.Warn().Int("child_id", childID).Int("task_id", taskDefinition.ID).Msg("Handler: Attempted to assign an already active task")
+        return c.Status(fiber.StatusConflict).JSON(models.Response{
+            Success: false,
+            Message: fmt.Sprintf("Task '%s' is already assigned or submitted for this child and needs to be completed or verified first.", taskDefinition.TaskName),
+        })
+	}
+
+	// 6. Assign task (Karena sudah divalidasi)
+	userTaskID, err := h.UserTaskRepo.AssignTask(ctx, childID, taskDefinition.ID, parentID)
+	if err != nil {
+		// Handle error saat assign (misal FK violation jika task/child dihapus setelah cek)
+		if strings.Contains(err.Error(), "invalid user, task, or assigner ID") {
+			return c.Status(fiber.StatusNotFound).JSON(models.Response{Success: false, Message: "Child or Task definition became invalid during assignment."})
 		}
 		return handleParentError(c, err, "AssignTaskToChild - Assign")
 	}
 
+	zlog.Info().Int("parent_id", parentID).Int("child_id", childID).Int("task_id", taskDefinition.ID).Int("user_task_id", userTaskID).Msg("Handler: Task assigned successfully")
 	return c.Status(fiber.StatusCreated).JSON(models.Response{Success: true, Message: "Task assigned successfully", Data: fiber.Map{"user_task_id": userTaskID}})
 }
 
@@ -749,19 +856,45 @@ func (h *ParentHandler) UpdateMyRewardDefinition(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(models.Response{Success: false, Message: "Validation failed", Data: errorDetails})
 	}
 
-	reward := &models.Reward{
-		ID:                rewardID, // Set ID dari URL
+	ctx := c.Context()
+
+	// 1. Get Reward berdasarkan ID saja
+	existingReward, err := h.RewardRepo.GetRewardByID(ctx, rewardID) // Panggil repo yang sudah disederhanakan
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			zlog.Warn().Int("reward_id", rewardID).Msg("Handler: Reward definition not found for update")
+			return c.Status(fiber.StatusNotFound).JSON(models.Response{Success: false, Message: "Reward definition not found"})
+		}
+		return handleParentError(c, err, "UpdateMyRewardDefinition - Get Reward")
+	}
+
+	// 2. Validasi Kepemilikan Eksplisit
+	if existingReward.CreatedByUserID != parentID {
+		zlog.Warn().Int("reward_id", rewardID).Int("requesting_parent_id", parentID).Int("owner_id", existingReward.CreatedByUserID).Msg("Handler: Forbidden attempt to update reward owned by another parent")
+		return c.Status(fiber.StatusForbidden).JSON(models.Response{
+			Success: false,
+			Message: "Forbidden: You do not have permission to modify this reward.",
+		})
+	}
+
+	// 3. Panggil Repository Update
+	rewardToUpdate := &models.Reward{
+		ID:                rewardID,
 		RewardName:        input.RewardName,
 		RewardPoint:       input.RewardPoint,
 		RewardDescription: input.RewardDescription,
 	}
 
-	ctx := c.Context()
-	err = h.RewardRepo.UpdateReward(ctx, reward, parentID)
+	err = h.RewardRepo.UpdateReward(ctx, rewardToUpdate, parentID) // repo masih cek ownership juga
 	if err != nil {
-		return handleParentError(c, err, "UpdateMyRewardDefinition")
+		if errors.Is(err, pgx.ErrNoRows) {
+			zlog.Warn().Int("reward_id", rewardID).Msg("Handler: Reward definition disappeared before update could complete (race condition?)")
+			return c.Status(fiber.StatusNotFound).JSON(models.Response{Success: false, Message: "Reward definition not found (possibly deleted already)"})
+		}
+		return handleParentError(c, err, "UpdateMyRewardDefinition - Update Reward")
 	}
 
+	zlog.Info().Int("parent_id", parentID).Int("updated_reward_id", rewardID).Msg("Handler: Reward definition updated successfully")
 	return c.Status(http.StatusOK).JSON(models.Response{Success: true, Message: "Reward definition updated successfully"})
 }
 
@@ -793,14 +926,41 @@ func (h *ParentHandler) DeleteMyRewardDefinition(c *fiber.Ctx) error {
 	}
 
 	ctx := c.Context()
-	err = h.RewardRepo.DeleteReward(ctx, rewardID, parentID)
+
+	// 1. Get Reward berdasarkan ID saja
+	existingReward, err := h.RewardRepo.GetRewardByID(ctx, rewardID)
 	if err != nil {
-		if strings.Contains(err.Error(), "claimed or is pending") {
-			return c.Status(fiber.StatusConflict).JSON(models.Response{Success: false, Message: err.Error()})
+		if errors.Is(err, pgx.ErrNoRows) {
+			zlog.Warn().Int("reward_id", rewardID).Msg("Handler: Reward definition not found for deletion")
+			return c.Status(fiber.StatusNotFound).JSON(models.Response{Success: false, Message: "Reward definition not found"})
 		}
-		return handleParentError(c, err, "DeleteMyRewardDefinition")
+		return handleParentError(c, err, "DeleteMyRewardDefinition - Get Reward")
 	}
 
+	// 2. Validasi Kepemilikan Eksplisit
+	if existingReward.CreatedByUserID != parentID {
+		zlog.Warn().Int("reward_id", rewardID).Int("requesting_parent_id", parentID).Int("owner_id", existingReward.CreatedByUserID).Msg("Handler: Forbidden attempt to delete reward owned by another parent")
+		return c.Status(fiber.StatusForbidden).JSON(models.Response{
+			Success: false,
+			Message: "Forbidden: You can only delete rewards you created.",
+		})
+	}
+
+	// 3. Panggil Repository Delete
+	err = h.RewardRepo.DeleteReward(ctx, rewardID, parentID) // repo masih cek ownership & FK
+	if err != nil {
+		if strings.Contains(err.Error(), "claimed or is pending") {
+			zlog.Warn().Err(err).Int("reward_id", rewardID).Msg("Handler: Conflict deleting claimed reward definition")
+			return c.Status(fiber.StatusConflict).JSON(models.Response{Success: false, Message: err.Error()})
+		}
+		if errors.Is(err, pgx.ErrNoRows) {
+			zlog.Warn().Int("reward_id", rewardID).Msg("Handler: Reward definition disappeared before deletion could complete (race condition?)")
+			return c.Status(fiber.StatusNotFound).JSON(models.Response{Success: false, Message: "Reward definition not found (possibly deleted already)"})
+		}
+		return handleParentError(c, err, "DeleteMyRewardDefinition - Delete Reward")
+	}
+
+	zlog.Info().Int("parent_id", parentID).Int("deleted_reward_id", rewardID).Msg("Handler: Reward definition deleted successfully")
 	return c.Status(http.StatusOK).JSON(models.Response{Success: true, Message: "Reward definition deleted successfully"})
 }
 
@@ -1043,5 +1203,113 @@ func (h *ParentHandler) CreateChildAccount(c *fiber.Ctx) error {
 		Success: true,
 		Message: "Child account created successfully",
 		Data:    fiber.Map{"child_id": childID},
+	})
+}
+
+// --- Invitation Code Management ---
+
+// GenerateInvitationCode godoc
+// @Summary Generate Invitation Code for Child
+// @Description Creates a unique, time-limited invitation code for a specific child linked to the parent.
+// @Tags Parent - Children Invitations
+// @Produce json
+// @Param childId path int true "Child User ID to generate code for"
+// @Success 201 {object} models.Response{data=map[string]string} "Invitation code generated successfully"
+// @Failure 400 {object} models.Response "Invalid Child ID"
+// @Failure 401 {object} models.Response "Unauthorized"
+// @Failure 403 {object} models.Response "Forbidden (Not the parent of this child)"
+// @Failure 404 {object} models.Response "Child user not found"
+// @Failure 500 {object} models.Response "Internal server error (code generation/storage failed)"
+// @Security ApiKeyAuth
+// @Router /parent/children/{childId}/invitations [post]
+func (h *ParentHandler) GenerateInvitationCode(c *fiber.Ctx) error {
+	// 1. Dapatkan ID Parent dari JWT
+	parentID, err := utils.ExtractUserIDFromJWT(c)
+	if err != nil {
+		zlog.Error().Err(err).Msg("Handler: Failed to extract parentID from JWT for GenerateInvitationCode")
+		return c.Status(fiber.StatusUnauthorized).JSON(models.Response{Success: false, Message: "Unauthorized: Invalid token"})
+	}
+
+	// 2. Dapatkan ID Child dari Parameter URL
+	childIDStr := c.Params("childId")
+	childID, err := strconv.Atoi(childIDStr)
+	if err != nil {
+		zlog.Warn().Err(err).Str("param", childIDStr).Msg("Handler: Invalid Child ID parameter for GenerateInvitationCode")
+		return c.Status(fiber.StatusBadRequest).JSON(models.Response{Success: false, Message: "Invalid Child ID parameter"})
+	}
+
+	// 3. Panggil Service Layer untuk Generate dan Simpan Kode
+	ctx := c.Context()
+	invitationCode, err := h.InvitationService.GenerateAndStoreCode(ctx, parentID, childID)
+	if err != nil {
+		// Gunakan helper error untuk menangani error dari service
+		// (misal: forbidden jika bukan parent, internal error jika gagal generate/simpan)
+		return handleParentError(c, err, "GenerateInvitationCode")
+	}
+
+	// 4. Kirim Kode sebagai Respons Sukses
+	zlog.Info().Int("parent_id", parentID).Int("child_id", childID).Str("code", invitationCode).Msg("Handler: Invitation code generated successfully")
+	return c.Status(fiber.StatusCreated).JSON(models.Response{
+		Success: true,
+		Message: "Invitation code generated successfully",
+		Data:    fiber.Map{"invitation_code": invitationCode},
+	})
+}
+
+// JoinWithInvitationCode godoc
+// @Summary Join Child via Invitation Code
+// @Description Allows a logged-in parent to establish a relationship with a child using a valid invitation code.
+// @Tags Parent - Children Invitations
+// @Accept json
+// @Produce json
+// @Param join_input body models.AcceptInvitationInput true "Invitation Code"
+// @Success 200 {object} models.Response "Successfully joined child using invitation code"
+// @Failure 400 {object} models.Response "Validation failed or invalid input body"
+// @Failure 401 {object} models.Response "Unauthorized"
+// @Failure 403 {object} models.Response "Forbidden (e.g., already parent, user not a Parent role)"
+// @Failure 404 {object} models.Response "Invalid, expired, or used invitation code"
+// @Failure 500 {object} models.Response "Internal server error"
+// @Security ApiKeyAuth
+// @Router /parent/join-child [post]
+func (h *ParentHandler) JoinWithInvitationCode(c *fiber.Ctx) error {
+	// 1. Dapatkan ID Parent yang join dari JWT
+	joiningParentID, err := utils.ExtractUserIDFromJWT(c)
+	if err != nil {
+		zlog.Error().Err(err).Msg("Handler: Failed to extract joiningParentID from JWT for JoinWithInvitationCode")
+		return c.Status(fiber.StatusUnauthorized).JSON(models.Response{Success: false, Message: "Unauthorized: Invalid token"})
+	}
+
+	// 2. Parse & Validasi Input Body (Kode Undangan)
+	input := new(models.AcceptInvitationInput)
+	if err := c.BodyParser(input); err != nil {
+		zlog.Warn().Err(err).Msg("Handler: Invalid request body for JoinWithInvitationCode")
+		return c.Status(fiber.StatusBadRequest).JSON(models.Response{Success: false, Message: "Invalid request body"})
+	}
+	if err := h.Validate.Struct(input); err != nil {
+		zlog.Warn().Err(err).Int("joining_parent_id", joiningParentID).Msg("Handler: Validation failed for JoinWithInvitationCode input")
+		errorDetails := utils.FormatValidationErrors(err)
+		return c.Status(fiber.StatusBadRequest).JSON(models.Response{Success: false, Message: "Validation failed", Data: errorDetails})
+	}
+
+	// 3. Panggil Service Layer untuk Menerima Undangan
+	ctx := c.Context()
+	err = h.InvitationService.AcceptInvitation(ctx, joiningParentID, input.Code)
+	if err != nil {
+		// Tangani error spesifik dari service
+		if errors.Is(err, service.ErrInvalidInvitationCode) {
+			return c.Status(fiber.StatusNotFound).JSON(models.Response{Success: false, Message: err.Error()}) // 404 untuk kode tidak valid/ditemukan
+		}
+		if errors.Is(err, service.ErrUserNotParent) || errors.Is(err, service.ErrAlreadyParent) {
+			return c.Status(fiber.StatusForbidden).JSON(models.Response{Success: false, Message: err.Error()}) // 403 untuk otorisasi/kondisi salah
+		}
+		// Gunakan helper untuk error internal lainnya
+		return handleParentError(c, err, "JoinWithInvitationCode")
+	}
+
+	// 4. Kirim Respons Sukses
+	zlog.Info().Int("joining_parent_id", joiningParentID).Str("code_used", input.Code).Msg("Handler: Parent successfully joined child via invitation code")
+	return c.Status(http.StatusOK).JSON(models.Response{
+		Success: true,
+		Message: "Successfully joined child using invitation code",
 	})
 }

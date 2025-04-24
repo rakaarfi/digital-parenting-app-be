@@ -202,10 +202,25 @@ func (r *userRepo) GetAllUsers(ctx context.Context, page, limit int) (users []mo
 }
 
 func (r *userRepo) UpdateUserByID(ctx context.Context, id int, input *models.AdminUpdateUserInput) error {
-	query := `UPDATE users SET username = $1, email = $2, first_name = $3, last_name = $4, role_id = $5
-              WHERE id = $6` // updated_at dihandle trigger
+	// query := `UPDATE users SET username = $1, email = $2, first_name = $3, last_name = $4, role_id = $5
+    //           WHERE id = $6` // updated_at dihandle trigger
 
-	tag, err := r.db.Exec(ctx, query, input.Username, input.Email, input.FirstName, input.LastName, input.RoleID, id)
+	query := `UPDATE users SET
+			  username = CASE WHEN $1 <> '' THEN $1 ELSE username END, -- Update jika input tidak kosong
+			  email = CASE WHEN $2 <> '' THEN $2 ELSE email END,
+			  first_name = $3,
+			  last_name = $4,
+			  role_id = CASE WHEN $5 > 0 THEN $5 ELSE role_id END -- Update role hanya jika input > 0
+			WHERE id = $6`
+
+	tag, err := r.db.Exec(ctx, query, 
+		input.Username, 
+		input.Email, 
+		input.FirstName, 
+		input.LastName, 
+		input.RoleID, 
+		id,
+	)
 	if err != nil {
 		// Handle unique constraint (username/email exists)
 		if pgErr, ok := err.(*pgconn.PgError); ok && pgErr.Code == "23505" {

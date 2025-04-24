@@ -15,7 +15,6 @@ import (
 	"github.com/rakaarfi/digital-parenting-app-be/internal/models"
 	"github.com/rakaarfi/digital-parenting-app-be/internal/repository"
 	"github.com/rakaarfi/digital-parenting-app-be/internal/utils" // Perlu hash
-	"github.com/rs/zerolog/log"
 	zlog "github.com/rs/zerolog/log"
 )
 
@@ -131,7 +130,7 @@ func (s *userServiceImpl) CreateChildAccount(ctx context.Context, parentID int, 
 	// --- 1. Mulai Transaksi ---
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
-		log.Error().Err(err).Msg("Service: Failed to begin transaction for CreateChildAccount")
+		zlog.Error().Err(err).Msg("Service: Failed to begin transaction for CreateChildAccount")
 		return 0, fmt.Errorf("internal server error: could not start operation")
 	}
 	defer func() { // Defer commit/rollback
@@ -139,15 +138,15 @@ func (s *userServiceImpl) CreateChildAccount(ctx context.Context, parentID int, 
 			_ = tx.Rollback(ctx)
 			panic(p)
 		} else if err != nil {
-			log.Warn().Err(err).Int("parent_id", parentID).Msg("Service: Rolling back transaction due to error during CreateChildAccount")
+			zlog.Warn().Err(err).Int("parent_id", parentID).Msg("Service: Rolling back transaction due to error during CreateChildAccount")
 			_ = tx.Rollback(ctx)
 		} else {
 			err = tx.Commit(ctx)
 			if err != nil {
-				log.Error().Err(err).Int("parent_id", parentID).Msg("Service: Failed to commit transaction for CreateChildAccount")
+				zlog.Error().Err(err).Int("parent_id", parentID).Msg("Service: Failed to commit transaction for CreateChildAccount")
 				err = fmt.Errorf("internal server error: could not finalize child creation")
 			} else {
-				log.Info().Int("child_id", childID).Int("parent_id", parentID).Msg("Service: Transaction committed for CreateChildAccount")
+				zlog.Info().Int("child_id", childID).Int("parent_id", parentID).Msg("Service: Transaction committed for CreateChildAccount")
 			}
 		}
 	}()
@@ -162,7 +161,7 @@ func (s *userServiceImpl) CreateChildAccount(ctx context.Context, parentID int, 
 	// --- 3. Hash Password Anak ---
 	hashedPassword, err := utils.HashPassword(input.Password)
 	if err != nil {
-		log.Error().Err(err).Msg("Service: Failed to hash child password during creation")
+		zlog.Error().Err(err).Msg("Service: Failed to hash child password during creation")
 		err = fmt.Errorf("%w: password processing error", ErrRegistrationFailed) // Reuse error
 		return 0, err                                                            // Rollback
 	}
@@ -182,11 +181,11 @@ func (s *userServiceImpl) CreateChildAccount(ctx context.Context, parentID int, 
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
-			log.Warn().Str("username", input.Username).Str("email", input.Email).Msg("Service: Child username or email conflict")
+			zlog.Warn().Str("username", input.Username).Str("email", input.Email).Msg("Service: Child username or email conflict")
 			err = ErrUsernameOrEmailExists
 			return 0, err // Rollback
 		}
-		log.Error().Err(err).Str("username", input.Username).Msg("Service: Error creating child user in repository Tx")
+		zlog.Error().Err(err).Str("username", input.Username).Msg("Service: Error creating child user in repository Tx")
 		if strings.Contains(err.Error(), "username already taken") || strings.Contains(err.Error(), "email already taken") {
 			err = ErrUsernameOrEmailExists
 			return 0, err // Rollback
@@ -200,12 +199,12 @@ func (s *userServiceImpl) CreateChildAccount(ctx context.Context, parentID int, 
 	err = s.userRelRepo.AddRelationshipTx(ctx, tx, parentID, childID) // Panggil metode Tx
 	if err != nil {
 		// Handle error relasi sudah ada (seharusnya tidak terjadi jika user baru) atau FK violation
-		log.Error().Err(err).Int("parent_id", parentID).Int("child_id", childID).Msg("Service: Error adding relationship in repository Tx")
+		zlog.Error().Err(err).Int("parent_id", parentID).Int("child_id", childID).Msg("Service: Error adding relationship in repository Tx")
 		err = fmt.Errorf("%w: database error linking parent/child", ErrRegistrationFailed)
 		return 0, err // Rollback
 	}
 
 	// Jika semua berhasil, err = nil, defer akan commit
-	log.Info().Int("child_id", childID).Int("parent_id", parentID).Msg("Service: Child account created and linked successfully")
+	zlog.Info().Int("child_id", childID).Int("parent_id", parentID).Msg("Service: Child account created and linked successfully")
 	return childID, nil
 }

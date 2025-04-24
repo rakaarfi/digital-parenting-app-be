@@ -18,7 +18,7 @@ import (
 type JwtClaims struct {
 	UserID               int    `json:"user_id"`  // ID pengguna
 	Username             string `json:"username"` // Username pengguna
-	Role                 string `json:"role"`     // Role pengguna (misal: "Admin", "Employee")
+	Role                 string `json:"role"`     // Role pengguna (misal: "Admin", "Child")
 	jwt.RegisteredClaims        // Menyematkan claims standar JWT (ExpiresAt, IssuedAt, Issuer, dll.)
 }
 

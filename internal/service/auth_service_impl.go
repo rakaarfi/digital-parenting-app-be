@@ -22,6 +22,7 @@ var ErrRoleNotFound = errors.New("role not found")
 var ErrRegistrationFailed = errors.New("failed to register user")
 var ErrLoginFailed = errors.New("failed to login")
 var ErrUsernameOrEmailExists = errors.New("username or email already exists")
+var ErrDisallowedRoleRegistration = errors.New("registration for this role type is not allowed through this endpoint")
 
 type authServiceImpl struct {
 	userRepo repository.UserRepository
@@ -45,7 +46,7 @@ func (s *authServiceImpl) RegisterUser(ctx context.Context, input *models.Regist
 	if input.RoleID != 1 && input.RoleID != 3 { // Hanya izinkan Role ID 1 (Parent) dan 3 (Admin)
 		zlog.Warn().Int("role_id", input.RoleID).Msg("Service: Attempt to register with disallowed role via public endpoint")
 		// Kembalikan error yang jelas
-		return 0, fmt.Errorf("registration for the specified role type (ID: %d) is not allowed through this endpoint", input.RoleID)
+		return 0, ErrDisallowedRoleRegistration
 	}
 
 	// 1. Validasi Role ID (panggil repo)

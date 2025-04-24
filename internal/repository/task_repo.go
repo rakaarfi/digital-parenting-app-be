@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 
@@ -50,16 +51,17 @@ func (r *taskRepo) CreateTask(ctx context.Context, task *models.Task) (int, erro
 
 // GetTaskByID mengambil detail definisi task berdasarkan ID-nya.
 // Memerlukan parentID untuk memvalidasi bahwa task tersebut dibuat oleh parent yang meminta.
-func (r *taskRepo) GetTaskByID(ctx context.Context, id int, parentID int) (*models.Task, error) {
+func (r *taskRepo) GetTaskByID(ctx context.Context, id int) (*models.Task, error) {
 	query := `SELECT id, task_name, task_point, task_description, created_by_user_id, created_at, updated_at
               FROM tasks
-              WHERE id = $1 AND created_by_user_id = $2` // Validasi kepemilikan di query
+              WHERE id = $1` // Validasi kepemilikan di query
 	task := &models.Task{}
-	err := r.db.QueryRow(ctx, query, id, parentID).Scan(
+	var description sql.NullString
+	err := r.db.QueryRow(ctx, query, id).Scan(
 		&task.ID,
 		&task.TaskName,
 		&task.TaskPoint,
-		&task.TaskDescription,
+		&description,
 		&task.CreatedByUserID,
 		&task.CreatedAt,
 		&task.UpdatedAt,
@@ -67,13 +69,19 @@ func (r *taskRepo) GetTaskByID(ctx context.Context, id int, parentID int) (*mode
 
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			zlog.Warn().Int("task_id", id).Int("requesting_parent_id", parentID).Msg("Task definition not found or access denied")
+			zlog.Warn().Int("task_id", id).Msg("Task definition not found by ID")
 			// Kembalikan ErrNoRows agar handler tahu tidak ditemukan / tidak berhak
 			return nil, pgx.ErrNoRows
 		}
 		// Error umum
-		zlog.Error().Err(err).Int("task_id", id).Int("requesting_parent_id", parentID).Msg("Error getting task definition by ID")
+		zlog.Error().Err(err).Int("task_id", id).Msg("Error getting task definition by ID")
 		return nil, fmt.Errorf("error getting task definition %d: %w", id, err)
+	}
+
+	if description.Valid {
+		task.TaskDescription = description.String
+	} else {
+		task.TaskDescription = ""
 	}
 
 	return task, nil

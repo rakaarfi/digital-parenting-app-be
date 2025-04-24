@@ -448,14 +448,16 @@ func (r *userRewardRepo) UpdateClaimStatusTx(ctx context.Context, tx pgx.Tx, id 
 
 // GetClaimDetailsForReviewTx mengambil detail minimal klaim untuk proses review dalam transaksi.
 func (r *userRewardRepo) GetClaimDetailsForReviewTx(ctx context.Context, tx pgx.Tx, claimID int) (*ClaimReviewDetails, error) {
-	query := `SELECT user_id, status, points_deducted
-              FROM user_rewards
-              WHERE id = $1 FOR UPDATE` // Lock baris klaim
+	query := `SELECT ur.user_id, ur.status, ur.points_deducted, rw.created_by_user_id -- Tambahkan creator reward
+				FROM user_rewards ur
+				JOIN rewards rw ON ur.reward_id = rw.id -- Perlu JOIN ke rewards
+				WHERE ur.id = $1 FOR UPDATE`
 	details := &ClaimReviewDetails{}
 	err := tx.QueryRow(ctx, query, claimID).Scan(
 		&details.ChildID,
 		&details.CurrentStatus,
 		&details.PointsDeducted,
+		&details.RewardCreatorID,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

@@ -219,6 +219,77 @@ func (r *userRelationshipRepo) AddRelationshipTx(ctx context.Context, tx pgx.Tx,
 	return nil
 }
 
+func (r *userRelationshipRepo) HasSharedChild(ctx context.Context, parentID1 int, parentID2 int) (bool, error) {
+	// Query untuk cek keberadaan anak bersama
+	query := `SELECT EXISTS (
+                SELECT 1
+                FROM user_relationship ur1
+                JOIN user_relationship ur2 ON ur1.child_id = ur2.child_id
+                WHERE ur1.parent_id = $1
+                  AND ur2.parent_id = $2
+            )`
+	var exists bool
+	err := r.db.QueryRow(ctx, query, parentID1, parentID2).Scan(&exists)
+	if err != nil {
+		// Error saat query, bukan karena tidak ada
+		zlog.Error().Err(err).Int("parentID1", parentID1).Int("parentID2", parentID2).Msg("Error checking for shared child")
+		return false, fmt.Errorf("error checking for shared child between %d and %d: %w", parentID1, parentID2, err)
+	}
+	return exists, nil
+}
+
+// GetParentIDsByChildIDTx mengambil slice ID parent dari anak tertentu dalam transaksi.
+func (r *userRelationshipRepo) GetParentIDsByChildIDTx(ctx context.Context, tx pgx.Tx, childID int) ([]int, error) {
+	parentIDs := []int{}
+	query := `SELECT parent_id FROM user_relationship WHERE child_id = $1`
+	rows, err := tx.Query(ctx, query, childID) // Gunakan tx.Query
+	if err != nil {
+		// Jika error adalah no rows, kembalikan slice kosong (bukan error)
+        // pgx V5 Query tidak mengembalikan ErrNoRows secara langsung, cek rows.Err() setelah loop
+        // jadi kita tangani error umum saja di sini
+		zlog.Error().Err(err).Int("child_id", childID).Msg("RepoTx: Error querying parent IDs by child ID")
+		return nil, fmt.Errorf("repoTx error getting parent IDs for child %d: %w", childID, err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var pID int
+		if err := rows.Scan(&pID); err != nil {
+			zlog.Warn().Err(err).Int("child_id", childID).Msg("RepoTx: Error scanning parent ID")
+			// Kembalikan error jika scan gagal
+			return nil, fmt.Errorf("repoTx error scanning parent ID: %w", err)
+		}
+		parentIDs = append(parentIDs, pID)
+	}
+
+	// Periksa error setelah iterasi selesai
+	if err = rows.Err(); err != nil {
+        zlog.Error().Err(err).Int("child_id", childID).Msg("RepoTx: Error iterating parent ID rows")
+        return nil, fmt.Errorf("repoTx error iterating parent IDs: %w", err)
+    }
+
+
+	return parentIDs, nil
+}
+
+// HasSharedChildTx memeriksa apakah dua parent berbagi anak dalam transaksi.
+func (r *userRelationshipRepo) HasSharedChildTx(ctx context.Context, tx pgx.Tx, parentID1 int, parentID2 int) (bool, error) {
+	query := `SELECT EXISTS (
+                SELECT 1
+                FROM user_relationship ur1
+                JOIN user_relationship ur2 ON ur1.child_id = ur2.child_id
+                WHERE ur1.parent_id = $1
+                  AND ur2.parent_id = $2
+            )`
+	var exists bool
+	err := tx.QueryRow(ctx, query, parentID1, parentID2).Scan(&exists) // Gunakan tx.QueryRow
+	if err != nil {
+		zlog.Error().Err(err).Int("parentID1", parentID1).Int("parentID2", parentID2).Msg("RepoTx: Error checking for shared child")
+		return false, fmt.Errorf("repoTx error checking for shared child between %d and %d: %w", parentID1, parentID2, err)
+	}
+	return exists, nil
+}
+
 // Anda bisa menambahkan metode Tx lain jika diperlukan, misalnya AddRelationshipTx atau RemoveRelationshipTx
 // jika operasi tersebut perlu menjadi bagian dari transaksi yang lebih besar di service layer.
 // func (r *userRelationshipRepo) AddRelationshipTx(ctx context.Context, tx pgx.Tx, parentID int, childID int) error { ... }

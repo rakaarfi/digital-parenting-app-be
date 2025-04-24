@@ -206,7 +206,7 @@
                         "ApiKeyAuth": []
                     }
                 ],
-                "description": "Deletes an existing role by its ID. Cannot delete base roles (Admin/Employee).",
+                "description": "Deletes an existing role by its ID. Cannot delete base roles (Admin/Child).",
                 "consumes": [
                     "application/json"
                 ],
@@ -240,7 +240,7 @@
                         }
                     },
                     "403": {
-                        "description": "Cannot delete base roles (Admin/Employee)",
+                        "description": "Cannot delete base roles (Admin/Child)",
                         "schema": {
                             "$ref": "#/definitions/models.Response"
                         }
@@ -1474,6 +1474,85 @@
                 }
             }
         },
+        "/parent/children/{childId}/invitations": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Creates a unique, time-limited invitation code for a specific child linked to the parent.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Parent - Children Invitations"
+                ],
+                "summary": "Generate Invitation Code for Child",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Child User ID to generate code for",
+                        "name": "childId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Invitation code generated successfully",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/models.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "object",
+                                            "additionalProperties": {
+                                                "type": "string"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid Child ID",
+                        "schema": {
+                            "$ref": "#/definitions/models.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/models.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden (Not the parent of this child)",
+                        "schema": {
+                            "$ref": "#/definitions/models.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Child user not found",
+                        "schema": {
+                            "$ref": "#/definitions/models.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error (code generation/storage failed)",
+                        "schema": {
+                            "$ref": "#/definitions/models.Response"
+                        }
+                    }
+                }
+            }
+        },
         "/parent/children/{childId}/points": {
             "post": {
                 "security": [
@@ -1836,6 +1915,75 @@
                     },
                     "500": {
                         "description": "Internal server error (e.g., point update failed)",
+                        "schema": {
+                            "$ref": "#/definitions/models.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/parent/join-child": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Allows a logged-in parent to establish a relationship with a child using a valid invitation code.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Parent - Children Invitations"
+                ],
+                "summary": "Join Child via Invitation Code",
+                "parameters": [
+                    {
+                        "description": "Invitation Code",
+                        "name": "join_input",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.AcceptInvitationInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successfully joined child using invitation code",
+                        "schema": {
+                            "$ref": "#/definitions/models.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Validation failed or invalid input body",
+                        "schema": {
+                            "$ref": "#/definitions/models.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/models.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden (e.g., already parent, user not a Parent role)",
+                        "schema": {
+                            "$ref": "#/definitions/models.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Invalid, expired, or used invitation code",
+                        "schema": {
+                            "$ref": "#/definitions/models.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
                         "schema": {
                             "$ref": "#/definitions/models.Response"
                         }
@@ -2620,6 +2768,18 @@
         }
     },
     "definitions": {
+        "models.AcceptInvitationInput": {
+            "type": "object",
+            "required": [
+                "invitation_code"
+            ],
+            "properties": {
+                "invitation_code": {
+                    "description": "Validasi panjang sesuai DB",
+                    "type": "string"
+                }
+            }
+        },
         "models.AddChildInput": {
             "type": "object",
             "required": [
@@ -2653,11 +2813,6 @@
         },
         "models.AdminUpdateUserInput": {
             "type": "object",
-            "required": [
-                "email",
-                "role_id",
-                "username"
-            ],
             "properties": {
                 "email": {
                     "type": "string"

@@ -585,3 +585,23 @@ func (r *userTaskRepo) UpdateStatusTx(ctx context.Context, tx pgx.Tx, id int, ne
 	}
 	return nil
 }
+
+// CheckExistingActiveTask memeriksa apakah ada penugasan task yang sama
+// dengan status 'assigned' atau 'submitted' untuk user tertentu.
+func (r *userTaskRepo) CheckExistingActiveTask(ctx context.Context, userID, taskID int) (bool, error) {
+	query := `SELECT EXISTS (
+                SELECT 1
+                FROM user_tasks
+                WHERE user_id = $1
+                  AND task_id = $2
+                  AND status IN ($3, $4)
+            )`
+	var exists bool
+	err := r.db.QueryRow(ctx, query, userID, taskID, models.UserTaskStatusAssigned, models.UserTaskStatusSubmitted).Scan(&exists)
+	if err != nil {
+        // Error saat query, bukan karena tidak ada (EXISTS selalu return 1 baris)
+		zlog.Error().Err(err).Int("user_id", userID).Int("task_id", taskID).Msg("Error checking for existing active task")
+		return false, fmt.Errorf("error checking existing task: %w", err)
+	}
+	return exists, nil
+}

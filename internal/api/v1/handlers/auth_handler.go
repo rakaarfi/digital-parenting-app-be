@@ -74,6 +74,12 @@ func (h *AuthHandler) Register(c *fiber.Ctx) error {
 				Success: false, Message: fmt.Sprintf("Role with ID %d not found", input.RoleID),
 			})
 		}
+		if errors.Is(err, service.ErrDisallowedRoleRegistration) {
+            // Kembalikan 400 Bad Request atau 403 Forbidden
+            return c.Status(fiber.StatusBadRequest).JSON(models.Response{
+                Success: false, Message: service.ErrDisallowedRoleRegistration.Error(),
+            })
+        }
 		// Handle error registrasi generik atau internal lainnya
 		zlog.Error().Err(err).Str("username", input.Username).Msg("Handler: Error returned from AuthService.RegisterUser")
 		return c.Status(fiber.StatusInternalServerError).JSON(models.Response{

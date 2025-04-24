@@ -8,11 +8,10 @@ import (
 	"strconv"
 	"strings"
 
-	// "time"
-
 	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v2"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/rakaarfi/digital-parenting-app-be/internal/models"
 	"github.com/rakaarfi/digital-parenting-app-be/internal/repository"
 	"github.com/rakaarfi/digital-parenting-app-be/internal/utils"
@@ -35,71 +34,6 @@ func NewAdminHandler(
 		Validate: validator.New(),
 	}
 }
-
-// func parseAdminDateQueryParams(c *fiber.Ctx) (startDate time.Time, endDate time.Time, err error) {
-// 	now := time.Now()
-// 	// Default rentang: Awal bulan ini sampai akhir hari ini
-// 	startOfMonth := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
-// 	todayEnd := time.Date(now.Year(), now.Month(), now.Day(), 23, 59, 59, 999999999, now.Location())
-
-// 	startDateStr := c.Query("start_date")
-// 	endDateStr := c.Query("end_date")
-
-// 	if startDateStr != "" {
-// 		startDate, err = time.Parse(defaultDateFormat, startDateStr)
-// 		if err != nil {
-// 			zlog.Warn().Err(err).Str("start_date_query", startDateStr).Msg("Invalid start_date format, using default")
-// 			startDate = startOfMonth // Fallback
-// 			err = nil                // Reset error agar tidak stop proses
-// 		} else {
-// 			// Set ke awal hari
-// 			startDate = time.Date(startDate.Year(), startDate.Month(), startDate.Day(), 0, 0, 0, 0, startDate.Location())
-// 		}
-// 	} else {
-// 		startDate = startOfMonth // Default jika tidak ada query param
-// 	}
-
-// 	if endDateStr != "" {
-// 		endDate, err = time.Parse(defaultDateFormat, endDateStr)
-// 		if err != nil {
-// 			zlog.Warn().Err(err).Str("end_date_query", endDateStr).Msg("Invalid end_date format, using default")
-// 			endDate = todayEnd // Fallback
-// 			err = nil          // Reset error
-// 		} else {
-// 			// Set ke akhir hari
-// 			endDate = time.Date(endDate.Year(), endDate.Month(), endDate.Day(), 23, 59, 59, 999999999, endDate.Location())
-// 		}
-// 	} else {
-// 		endDate = todayEnd // Default jika tidak ada query param
-// 	}
-
-// 	if endDate.Before(startDate) {
-// 		err = errors.New("end_date cannot be before start_date")
-// 		return
-// 	}
-// 	return startDate, endDate, nil
-// }
-
-// const defaultDateFormat = "2006-01-02"
-
-// // parseDateQueryParam parses YYYY-MM-DD query param or returns default
-// func parseDateQueryParam(c *fiber.Ctx, paramName string, defaultValue time.Time) time.Time {
-// 	dateStr := c.Query(paramName)
-// 	if dateStr == "" {
-// 		zlog.Debug().Str("param", paramName).Msg("Query param empty, using default value")
-// 		return defaultValue
-// 	}
-// 	t, err := time.Parse(defaultDateFormat, dateStr)
-// 	if err != nil {
-// 		zlog.Warn().Err(err).Str("param", paramName).Str("value", dateStr).Msg("Invalid date format in query param, using default value")
-// 		return defaultValue
-// 	}
-// 	localLoc, _ := time.LoadLocation("Local")
-// 	parsedDate := time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, localLoc)
-// 	zlog.Debug().Str("param", paramName).Time("parsed_date", parsedDate).Msg("Date query param parsed successfully")
-// 	return parsedDate
-
-// }
 
 // -------------------------------------------------------------------------
 // User Management
@@ -226,7 +160,7 @@ func (h *AdminHandler) UpdateUser(c *fiber.Ctx) error {
 	adminUserId, _ := utils.ExtractUserIDFromJWT(c) // Abaikan error sementara jika hanya untuk log
 
 	// 3. Parse & Validasi Input Body (Gunakan struct input baru)
-	input := new(models.AdminUpdateUserInput) // <-- Gunakan input model baru
+	input := new(models.AdminUpdateUserInput)
 	if err := c.BodyParser(input); err != nil {
 		zlog.Error().Err(err).Msg("Error parsing update user request body")
 		return c.Status(fiber.StatusBadRequest).JSON(models.Response{
@@ -250,15 +184,30 @@ func (h *AdminHandler) UpdateUser(c *fiber.Ctx) error {
 
 	ctx := c.Context()
 
-	// 5. (Opsional tapi direkomendasikan) Validasi Role ID
-	_, errRole := h.RoleRepo.GetRoleByID(ctx, input.RoleID)
-	if errRole != nil {
-		// Handle jika role ID tidak valid
-		return c.Status(fiber.StatusBadRequest).JSON(models.Response{Success: false, Message: "Invalid Role ID"})
+	// 5. Validasi Role ID HANYA JIKA disediakan di input dan bukan 0
+	if input.RoleID != 0 { // Hanya validasi jika RoleID diisi (bukan nilai default 0)
+		_, errRole := h.RoleRepo.GetRoleByID(ctx, input.RoleID)
+		if errRole != nil {
+			if errors.Is(errRole, pgx.ErrNoRows) {
+				zlog.Warn().Err(errRole).Int("target_user_id", targetUserId).Int("provided_role_id", input.RoleID).Msg("Handler: Invalid Role ID provided during user update")
+				return c.Status(fiber.StatusBadRequest).JSON(models.Response{Success: false, Message: "Invalid Role ID provided"}) // Pesan lebih jelas
+			}
+			zlog.Error().Err(errRole).Int("target_user_id", targetUserId).Int("provided_role_id", input.RoleID).Msg("Handler: Error checking Role ID during user update")
+			return c.Status(fiber.StatusInternalServerError).JSON(models.Response{Success: false, Message: "Failed to validate role"})
+		}
+		// Jika validasi lolos, RoleID di input akan digunakan oleh repo
 	}
+	// else {
+	// Jika RoleID tidak disediakan (atau 0), repo UpdateUserByID TIDAK akan mengubah role user yang ada.
+    // Pastikan query UPDATE di repo hanya mengupdate role jika input.RoleID != 0?
+    // Tidak perlu, query UPDATE Anda sudah benar akan mengupdate ke nilai RoleID yang ada di `input`,
+    // tapi jika RoleID = 0 dan kita tidak validasi, mungkin menyebabkan error FK jika ID 0 tidak ada.
+    // Jadi, pengecekan `if input.RoleID != 0` sebelum validasi GetRoleByID sudah cukup.
+    // Repo `UpdateUserByID` akan menerima `input` apa adanya.
+	// }
 
 	// 6. Panggil repository untuk update user
-	err = h.UserRepo.UpdateUserByID(ctx, targetUserId, input) // <-- Pass input model baru
+	err = h.UserRepo.UpdateUserByID(ctx, targetUserId, input)
 	if err != nil {
 		// Cek apakah error karena user tidak ditemukan
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -351,6 +300,16 @@ func (h *AdminHandler) DeleteUser(c *fiber.Ctx) error {
 				Success: false, Message: fmt.Sprintf("User with ID %d not found", targetUserId),
 			})
 		}
+
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && (pgErr.Code == "23503" || pgErr.Code == "23502") {
+			zlog.Warn().Err(err).Int("target_user_id", targetUserId).Msg("Cannot delete user due to existing references")
+			return c.Status(fiber.StatusConflict).JSON(models.Response{ // 409 Conflict
+				Success: false,
+				Message: "Cannot delete user: User has existing related records (tasks, rewards, points, etc.).",
+			})
+		}
+
 		// Error lain saat menghapus
 		zlog.Error().Err(err).Int("target_user_id", targetUserId).Msg("Failed to delete user")
 		return c.Status(fiber.StatusInternalServerError).JSON(models.Response{
@@ -597,14 +556,14 @@ func (h *AdminHandler) UpdateRole(c *fiber.Ctx) error {
 
 // DeleteRole godoc
 // @Summary Delete role
-// @Description Deletes an existing role by its ID. Cannot delete base roles (Admin/Employee).
+// @Description Deletes an existing role by its ID. Cannot delete base roles (Admin/Child).
 // @Tags Admin - Roles Management
 // @Accept json
 // @Produce json
 // @Param roleId path int true "Role ID"
 // @Success 200 {object} models.Response "Role deleted successfully"
 // @Failure 400 {object} models.Response "Invalid Role ID parameter"
-// @Failure 403 {object} models.Response "Cannot delete base roles (Admin/Employee)"
+// @Failure 403 {object} models.Response "Cannot delete base roles (Admin/Child)"
 // @Failure 404 {object} models.Response "Role not found"
 // @Failure 500 {object} models.Response "Internal server error during role deletion"
 // @Security ApiKeyAuth
@@ -620,10 +579,10 @@ func (h *AdminHandler) DeleteRole(c *fiber.Ctx) error {
 	}
 
 	// Hindari menghapus role dasar (opsional tapi aman)
-	if roleID == 1 || roleID == 2 { // Asumsi ID 1=Admin, 2=Employee
+	if roleID == 1 || roleID == 2 { // Asumsi ID 1=Admin, 2=Child
 		zlog.Warn().Int("role_id", roleID).Msg("Attempted to delete base role")
 		return c.Status(fiber.StatusForbidden).JSON(models.Response{
-			Success: false, Message: "Cannot delete base roles (Admin/Employee)",
+			Success: false, Message: "Cannot delete base roles (Admin/Child)",
 		})
 	}
 

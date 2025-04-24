@@ -90,6 +90,7 @@ func main() {
 	rewardRepo := repository.NewRewardRepository(dbPool)
 	userRewardRepo := repository.NewUserRewardRepository(dbPool, userRelRepo)
 	pointRepo := repository.NewPointTransactionRepository(dbPool)
+	invitationCodeRepo := repository.NewInvitationCodeRepository(dbPool)
 	zlog.Info().Msg("Repositories initialized")
 
 	// --- Langkah 4: Inisialisasi Lapisan Service ---
@@ -99,6 +100,7 @@ func main() {
 	taskService := service.NewTaskService(dbPool, userTaskRepo, pointRepo, userRelRepo)
 	rewardService := service.NewRewardService(dbPool, rewardRepo, userRewardRepo, pointRepo, userRelRepo)
 	userService := service.NewUserService(dbPool, userRepo, roleRepo, userRelRepo)
+	invitationService := service.NewInvitationService(dbPool, invitationCodeRepo, userRelRepo, userRepo)
 	zlog.Info().Msg("Services initialized")
 
 	// --- Langkah 4: Inisialisasi Lapisan Handler ---
@@ -107,12 +109,15 @@ func main() {
 	authHandler := handlers.NewAuthHandler(authService)
 	adminHandler := handlers.NewAdminHandler(userRepo, roleRepo)
 	userHandler := handlers.NewUserHandler(userService)
-	parentHandler := handlers.NewParentHandler( // <-- Perbarui pemanggilan ini
+	parentHandler := handlers.NewParentHandler(
 		userRelRepo, taskRepo, userTaskRepo, rewardRepo, userRewardRepo,
 		pointRepo, userRepo, taskService, rewardService,
-		userService, // <-- OPER userService KE CONSTRUCTOR
+		userService,
+		invitationService,
 	)
-	childHandler := handlers.NewChildHandler(userTaskRepo, rewardRepo, userRewardRepo, pointRepo, rewardService) // Inject semua repo & service yg relevan
+	childHandler := handlers.NewChildHandler(
+		userTaskRepo, rewardRepo, userRewardRepo, pointRepo, rewardService,
+	)
 	zlog.Info().Msg("Handlers initialized")
 
 	// --- Langkah 5: Setup Aplikasi Fiber ---

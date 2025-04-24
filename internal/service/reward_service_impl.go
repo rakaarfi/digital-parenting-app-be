@@ -25,6 +25,7 @@ type rewardServiceImpl struct {
 
 // Definisikan error spesifik untuk service layer jika perlu
 var ErrInsufficientPoints = errors.New("insufficient points to claim reward")
+var ErrInvalidReviewStatus = errors.New("invalid status provided for review")
 
 // NewRewardService creates a new instance of RewardService.
 func NewRewardService(
@@ -76,12 +77,8 @@ func (s *rewardServiceImpl) ClaimReward(ctx context.Context, childID int, reward
 	}()
 
 	// --- 3. Logika Bisnis Inti dalam Transaksi ---
-	// Asumsi ada metode repo baru yang menerima Tx
 
-	// 3a. Dapatkan detail Reward (terutama required_points)
-	// Asumsi: rewardRepo.GetRewardDetailsTx(ctx, tx, rewardID) -> (*RewardDetails, error)
-	//         type RewardDetails struct { RequiredPoints int; /* ... */ }
-	// Anda perlu membuat metode ini di reward_repo.go
+	// 3a. Dapatkan detail Reward
 	rewardDetails, err := s.rewardRepo.GetRewardDetailsTx(ctx, tx, rewardID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -94,9 +91,27 @@ func (s *rewardServiceImpl) ClaimReward(ctx context.Context, childID int, reward
 		return 0, err // Rollback
 	}
 
-	// 3b. Dapatkan Poin Anak Saat Ini
-	// Asumsi: pointRepo.CalculateTotalPointsByUserIDTx(ctx, tx, childID) -> (int, error)
-	// Anda perlu membuat metode ini di point_transaction_repo.go
+	// 3b. Validasi Hak Anak untuk Klaim Reward Ini
+	childParents, err := s.userRelRepo.GetParentIDsByChildIDTx(ctx, tx, childID) // Metode Repo Baru (hanya return []int)
+	if err != nil {
+		zlog.Error().Err(err).Int("child_id", childID).Msg("Service: Failed to get parents for child during claim validation")
+		err = fmt.Errorf("%w: error checking child's parents", ErrInvitationFailed) // Atau error lain
+		return 0, err                                                               // Rollback
+	}
+	isAllowedCreator := false
+	for _, pID := range childParents {
+		if pID == rewardDetails.CreatedByUserID { // Cek apakah pembuat reward adalah salah satu parent anak
+			isAllowedCreator = true
+			break
+		}
+	}
+	if !isAllowedCreator {
+		zlog.Warn().Int("child_id", childID).Int("reward_id", rewardID).Int("creator_id", rewardDetails.CreatedByUserID).Msg("Service: Child attempted to claim reward from unrelated parent")
+		err = fmt.Errorf("forbidden: you cannot claim this reward")
+		return 0, err // Rollback
+	}
+
+	// 3c. Dapatkan Poin Anak Saat Ini
 	currentPoints, err := s.pointRepo.CalculateTotalPointsByUserIDTx(ctx, tx, childID)
 	if err != nil {
 		zlog.Error().Err(err).Int("child_id", childID).Msg("Service: Error calculating child points for claim")
@@ -104,7 +119,7 @@ func (s *rewardServiceImpl) ClaimReward(ctx context.Context, childID int, reward
 		return 0, err // Rollback
 	}
 
-	// 3c. Cek Poin Cukup
+	// 3d. Cek Poin Cukup
 	if currentPoints < rewardDetails.RequiredPoints {
 		zlog.Warn().Int("child_id", childID).Int("reward_id", rewardID).Int("current_points", currentPoints).Int("required_points", rewardDetails.RequiredPoints).Msg("Service: Insufficient points for reward claim")
 		err = ErrInsufficientPoints // Gunakan error spesifik service
@@ -121,36 +136,52 @@ func (s *rewardServiceImpl) ClaimReward(ctx context.Context, childID int, reward
 		return 0, err // Rollback
 	}
 
-	// Klaim berhasil dibuat (status 'pending'), poin *belum* dikurangi.
-	// Pengurangan poin terjadi saat parent *menyetujui* klaim (ini akan ada di metode service lain, misal ReviewClaim).
+	// 3e. Buat Transaksi Pengurangan Poin SEKARANG
+	if rewardDetails.RequiredPoints > 0 { // Hanya kurangi jika poin > 0
+		pointTx := &models.PointTransaction{
+			UserID:          childID,
+			ChangeAmount:    -rewardDetails.RequiredPoints, // Poin negatif
+			TransactionType: models.TransactionTypeRedemption,
+			// RelatedUserRewardID diisi NANTI setelah klaim dibuat? Atau bisa NULL?
+			// Jika FK constraint mengizinkan NULL, biarkan 0 di sini. Jika tidak, perlu update lagi nanti.
+			// Mari asumsikan bisa NULL/0 untuk sementara.
+			// RelatedUserRewardID: 0,
+			CreatedByUserID: childID,                                                            // Anak yang menginisiasi klaim
+			Notes:           fmt.Sprintf("Points deducted for claiming reward ID %d", rewardID), // Opsional
+		}
+		err = s.pointRepo.CreateTransactionTx(ctx, tx, pointTx)
+		if err != nil {
+			zlog.Error().Err(err).Int("reward_id", rewardID).Int("child_id", childID).Msg("Service: Failed to create point deduction transaction within DB transaction")
+			err = fmt.Errorf("internal server error: could not update points balance")
+			return 0, err // Rollback
+		}
+		zlog.Info().Int("reward_id", rewardID).Int("points_deducted", rewardDetails.RequiredPoints).Int("child_id", childID).Msg("Service: Point deduction transaction created within DB transaction")
+	}
 
-	// Jika ingin poin langsung dikurangi saat klaim (bukan saat approval), tambahkan langkah 3e:
-	/*
-	   // 3e. Buat Transaksi Poin Negatif dalam Transaksi DB
-	   pointTx := &models.PointTransaction{
-	       UserID:              childID,
-	       ChangeAmount:        -rewardDetails.RequiredPoints, // Poin negatif
-	       TransactionType:     models.TransactionTypeRedemption,
-	       RelatedUserRewardID: claimID, // Gunakan ID klaim yang baru dibuat
-	       CreatedByUserID:     childID, // Anak yang melakukan klaim
-	   }
-	   err = s.pointRepo.CreateTransactionTx(ctx, tx, pointTx)
-	   if err != nil {
-	       zlog.Error().Err(err).Int("claim_id", claimID).Msg("Service: Failed to create point deduction transaction within DB transaction")
-	       err = fmt.Errorf("internal server error: could not update points balance")
-	       return 0, err // Rollback
-	   }
-	   zlog.Info().Int("claim_id", claimID).Int("points_deducted", rewardDetails.RequiredPoints).Int("child_id", childID).Msg("Service: Point deduction transaction created within DB transaction")
-	*/
+	// 3f. Buat Record UserReward (Klaim) dalam Transaksi
+	//    pointsDeducted di sini adalah nilai *snapshot* saat klaim, sesuai harga reward
+	claimID, err = s.userRewardRepo.CreateClaimTx(ctx, tx, childID, rewardID, rewardDetails.RequiredPoints)
+	if err != nil {
+		zlog.Error().Err(err).Int("child_id", childID).Int("reward_id", rewardID).Msg("Service: Failed to create user reward claim within transaction")
+		// Jika pengurangan poin sudah terjadi, apakah perlu di-rollback manual?
+		// Defer akan handle rollback DB, jadi state konsisten.
+		err = fmt.Errorf("internal server error: could not create claim record")
+		return 0, err // Rollback
+	}
 
-	// Jika semua berhasil, err = nil, defer akan commit
+	// (Opsional) Update RelatedUserRewardID di PointTransaction jika FK tidak nullable
+	// if !nullableFK && rewardDetails.RequiredPoints > 0 {
+	//     err = s.pointRepo.UpdateRewardIDForTransactionTx(ctx, tx, /* ID transaksi poin */, claimID)
+	//     if err != nil { /* rollback */ }
+	// }
+
 	return claimID, nil // Sukses
 }
 
 func (s *rewardServiceImpl) ReviewClaim(ctx context.Context, claimID int, parentID int, newStatus models.UserRewardStatus) (err error) {
 	// Validasi input status (opsional tapi baik)
 	if newStatus != models.UserRewardStatusApproved && newStatus != models.UserRewardStatusRejected {
-		return fmt.Errorf("invalid target status for review: %s", newStatus)
+		return ErrInvalidReviewStatus
 	}
 
 	// --- 1. Mulai Transaksi ---
@@ -184,12 +215,8 @@ func (s *rewardServiceImpl) ReviewClaim(ctx context.Context, claimID int, parent
 	}()
 
 	// --- 3. Logika Bisnis Inti dalam Transaksi ---
-	// Asumsi ada metode repo baru yang menerima Tx
 
-	// 3a. Dapatkan detail Klaim (childID, status saat ini, pointsDeducted)
-	// Asumsi: userRewardRepo.GetClaimDetailsForReviewTx(ctx, tx, claimID) -> (*ClaimReviewDetails, error)
-	//          type ClaimReviewDetails struct { ChildID int; CurrentStatus models.UserRewardStatus; PointsDeducted int; }
-	// Anda perlu membuat metode ini di user_reward_repo.go
+	// 3a. Dapatkan detail Klaim
 	claimDetails, err := s.userRewardRepo.GetClaimDetailsForReviewTx(ctx, tx, claimID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -210,23 +237,40 @@ func (s *rewardServiceImpl) ReviewClaim(ctx context.Context, claimID int, parent
 	}
 
 	// 3c. Validasi Relasi Parent-Child
-	// Asumsi: userRelRepo.IsParentOfTx(ctx, tx, parentID, childID) -> (bool, error)
-	// Metode ini sudah Anda buat implementasinya di user_relationship_repo.go
-	isParent, err := s.userRelRepo.IsParentOfTx(ctx, tx, parentID, claimDetails.ChildID)
+	isParentOfClaimant, err := s.userRelRepo.IsParentOfTx(ctx, tx, parentID, claimDetails.ChildID)
 	if err != nil {
 		zlog.Error().Err(err).Int("parent_id", parentID).Int("child_id", claimDetails.ChildID).Msg("Service: Error checking parent-child relationship during claim review")
 		err = fmt.Errorf("internal server error: could not verify relationship")
 		return err // Rollback
 	}
-	if !isParent {
+	if !isParentOfClaimant {
 		zlog.Warn().Int("claim_id", claimID).Int("parent_id", parentID).Int("child_id", claimDetails.ChildID).Msg("Service: Review claim failed: Requesting user is not the parent")
 		err = fmt.Errorf("forbidden: you are not authorized to review claims for this child")
 		return err // Rollback
 	}
 
+	canReview := false
+	if parentID == claimDetails.RewardCreatorID {
+		canReview = true // Reviewer adalah pembuat reward
+	} else {
+		// Cek apakah reviewer punya anak bersama dengan pembuat reward
+		hasShared, errShared := s.userRelRepo.HasSharedChildTx(ctx, tx, parentID, claimDetails.RewardCreatorID) // Perlu metode Tx ini
+		if errShared != nil {
+			zlog.Error().Err(errShared).Int("reviewer", parentID).Int("creator", claimDetails.RewardCreatorID).Msg("Service: Error checking shared child for reward review")
+			err = fmt.Errorf("%w: error checking reviewer permissions", ErrInvitationFailed) // atau error lain
+			return err                                                                       // Rollback
+		}
+		if hasShared {
+			canReview = true // Boleh review karena satu "keluarga"
+		}
+	}
+	if !canReview {
+		zlog.Warn().Int("claim_id", claimID).Int("reviewer", parentID).Int("creator", claimDetails.RewardCreatorID).Msg("Service: Parent attempted to review claim for reward created by unrelated parent")
+		err = fmt.Errorf("forbidden: you cannot review claims for rewards created outside your family scope")
+		return err // Rollback
+	}
+
 	// 3d. Update Status Klaim dalam Transaksi
-	// Asumsi: userRewardRepo.UpdateClaimStatusTx(ctx, tx, claimID, newStatus, parentID) -> error
-	// Metode ini sudah Anda buat implementasinya di user_reward_repo.go
 	err = s.userRewardRepo.UpdateClaimStatusTx(ctx, tx, claimID, newStatus, parentID)
 	if err != nil {
 		// Error bisa karena status sudah berubah (concurrency) atau error DB lain
@@ -241,29 +285,35 @@ func (s *rewardServiceImpl) ReviewClaim(ctx context.Context, claimID int, parent
 	}
 
 	// 3e. Jika Approved, Buat Transaksi Pengurangan Poin
-	if newStatus == models.UserRewardStatusApproved {
+	// --- MODIFIKASI: HAPUS BLOK PENGURANGAN POIN SAAT APPROVE ---
+	// if newStatus == models.UserRewardStatusApproved { /* ... kode pengurangan poin dihapus ... */ }
+
+	// --- TAMBAHKAN BLOK PENGEMBALIAN POIN SAAT REJECT ---
+	if newStatus == models.UserRewardStatusRejected {
+		// Hanya kembalikan poin jika memang ada poin yang tercatat untuk dikurangi
 		if claimDetails.PointsDeducted > 0 {
-			pointTx := &models.PointTransaction{
+			refundTx := &models.PointTransaction{
 				UserID:              claimDetails.ChildID,
-				ChangeAmount:        -claimDetails.PointsDeducted, // Poin negatif
-				TransactionType:     models.TransactionTypeRedemption,
-				RelatedUserRewardID: claimID,
-				CreatedByUserID:     parentID, // Parent yang approve
+				ChangeAmount:        claimDetails.PointsDeducted, // Poin POSITIF
+				TransactionType:     models.TransactionTypeManualAdjustment, // Atau tipe baru: "reward_refund"
+				RelatedUserRewardID: claimID,                   // Kaitkan dengan klaim yang ditolak
+				CreatedByUserID:     parentID,                    // Parent yang reject
+				Notes:               fmt.Sprintf("Points refunded for rejected reward claim ID %d", claimID),
 			}
-			// Asumsi: pointRepo.CreateTransactionTx(ctx, tx, pointTx) -> error
-			// Metode ini sudah Anda buat implementasinya di point_transaction_repo.go
-			err = s.pointRepo.CreateTransactionTx(ctx, tx, pointTx)
+			err = s.pointRepo.CreateTransactionTx(ctx, tx, refundTx)
 			if err != nil {
-				zlog.Error().Err(err).Int("claim_id", claimID).Msg("Service: Failed to create point deduction transaction after claim approval")
-				err = fmt.Errorf("internal server error: could not update points balance")
+				zlog.Error().Err(err).Int("claim_id", claimID).Msg("Service: Failed to create point refund transaction after claim rejection")
+				// Ini masalah serius, tapi status klaim sudah 'rejected'. Tetap rollback?
+				// Mungkin lebih baik biarkan commit status reject tapi log error refund.
+				// Atau kembalikan error internal. Kita pilih rollback untuk konsistensi.
+				err = fmt.Errorf("internal server error: claim rejected but failed to refund points")
 				return err // Rollback
 			}
-			zlog.Info().Int("claim_id", claimID).Int("points_deducted", claimDetails.PointsDeducted).Int("child_id", claimDetails.ChildID).Msg("Service: Point deduction transaction created within DB transaction")
+			zlog.Info().Int("claim_id", claimID).Int("points_refunded", claimDetails.PointsDeducted).Int("child_id", claimDetails.ChildID).Msg("Service: Point refund transaction created within DB transaction")
 		} else {
-			zlog.Info().Int("claim_id", claimID).Msg("Service: Claim approved, but no points deducted (PointsDeducted <= 0)")
-		}
+            zlog.Info().Int("claim_id", claimID).Msg("Service: Claim rejected, no points to refund (PointsDeducted was 0)")
+        }
 	}
 
-	// Jika semua berhasil, err = nil, defer akan commit
 	return nil // Sukses
 }
