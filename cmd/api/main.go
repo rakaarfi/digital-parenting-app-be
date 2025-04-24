@@ -25,14 +25,14 @@ import (
 // @title Digital Parenting App BE API
 // @version 1.0
 // @description API backend for digital parenting application.
-// @termsOfService http://swagger.io/terms/
+// @termsOfService http://swagger.io/terms/ # Optional: Update or remove
 
-// @contact.name API Support
-// @contact.url http://www.swagger.io/support
-// @contact.email support@swagger.io
+// @contact.name API Support # Optional: Update or remove
+// @contact.url http://www.swagger.io/support # Optional: Update or remove
+// @contact.email support@swagger.io # Optional: Update or remove
 
-// @license.name Apache 2.0
-// @license.url http://www.apache.org/licenses/LICENSE-2.0.html
+// @license.name MIT License
+// @license.url https://opensource.org/licenses/MIT
 
 // @host localhost:3001
 // @BasePath /api/v1

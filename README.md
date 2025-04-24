@@ -35,7 +35,7 @@ This application facilitates a task-based reward system between parents and chil
     *   Parent creates Child accounts.
     *   Admin manages all users (CRUD).
     *   Users manage their own profiles and passwords.
-*   **Parent-Child Relationship:** Links parent and child accounts.
+*   **Parent-Child Relationship:** Links parent and child accounts (including linking via invitation codes).
 *   **Task Management:**
     *   Parent creates/manages Task definitions (templates).
     *   Parent assigns Tasks to Child.
@@ -186,6 +186,8 @@ Base Path: `/api/v1`
     *   `POST /roles`: Create a new role.
     *   `GET /roles`: Get all roles.
     *   `PATCH /roles/{roleId}`: Update a role.
+    *   `GET /roles/{roleId}`: Get specific role details.
+    *   `PATCH /roles/{roleId}`: Update a role.
     *   `DELETE /roles/{roleId}`: Delete a role (cannot delete base roles, fails if in use).
 *   **User (`/user`)** [Requires Any Logged-in Role]
     *   `GET /profile`: Get own profile details.
@@ -193,8 +195,11 @@ Base Path: `/api/v1`
     *   `PATCH /password`: Change own password.
 *   **Parent (`/parent`)** [Requires Parent Role]
     *   `POST /children/create`: Create a new child account and link it.
+    *   `POST /children`: Link an existing child account (e.g., via invitation).
     *   `GET /children`: Get list of linked children.
     *   `DELETE /children/{childId}`: Remove link to a child.
+    *   `POST /children/{childId}/invitations`: Generate an invitation code for a specific child.
+    *   `POST /join-child`: Link parent to a child using an invitation code.
     *   `POST /tasks`: Create a new task definition.
     *   `GET /tasks`: Get task definitions created by this parent (paginated).
     *   `PATCH /tasks/{taskId}`: Update own task definition.
@@ -217,7 +222,7 @@ Base Path: `/api/v1`
     *   `GET /rewards`: Get available rewards from linked parents (paginated).
     *   `POST /rewards/{rewardId}/claim`: Claim a specific reward.
     *   `GET /claims`: Get own reward claim history (filter by status, paginated).
-*   **Public (`/`)**
+*   **Public (`/api/v1`)**
     *   `GET /health`: API health check.
 
 ## Database Migrations 

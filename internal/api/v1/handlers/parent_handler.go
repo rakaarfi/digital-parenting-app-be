@@ -511,15 +511,16 @@ func (h *ParentHandler) DeleteMyTaskDefinition(c *fiber.Ctx) error {
 // @Summary Assign Task to Child
 // @Description Assigns a task definition created by the logged-in parent to a specific child user.
 // @Tags Parent - Tasks
+// @Accept json
 // @Produce json
 // @Param childId path int true "Child User ID to assign task to"
-// @Param task_id body int true "Task Definition ID to assign"
-// @Success 200 {object} models.Response "Task assigned to child successfully"
-// @Failure 400 {object} models.Response "Invalid Child ID or Task ID parameter"
+// @Param assign_task_input body models.AssignTaskInput true "Task Definition ID to assign (e.g., {\"task_id\": 1})"
+// @Success 201 {object} models.Response{data=map[string]int} "Task assigned to child successfully, returns user_task_id"
+// @Failure 400 {object} models.Response "Invalid Child ID, Task ID, or request body"
 // @Failure 401 {object} models.Response "Unauthorized"
-// @Failure 403 {object} models.Response "Forbidden (Not the parent)"
+// @Failure 403 {object} models.Response "Forbidden (Not the parent, or not authorized for this task definition)"
 // @Failure 404 {object} models.Response "Child user not found or task definition not found"
-// @Failure 409 {object} models.Response "Conflict (Task is already assigned to child)"
+// @Failure 409 {object} models.Response "Conflict (Task is already assigned/submitted and active for this child)"
 // @Failure 500 {object} models.Response "Internal server error"
 // @Security ApiKeyAuth
 // @Router /parent/children/{childId}/tasks [post]
@@ -547,11 +548,9 @@ func (h *ParentHandler) AssignTaskToChild(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusForbidden).JSON(models.Response{Success: false, Message: "You are not authorized to assign tasks to this child"})
 	}
 
-	// 2. Parse input (task_id)
-	var input struct {
-		TaskID int `json:"task_id" validate:"required,gt=0"`
-	}
-	if err := c.BodyParser(&input); err != nil {
+	// 2. Parse input (task_id) using the defined struct
+	input := new(models.AssignTaskInput)
+	if err := c.BodyParser(input); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(models.Response{Success: false, Message: "Invalid request body"})
 	}
 	if err := h.Validate.Struct(input); err != nil {
@@ -572,27 +571,21 @@ func (h *ParentHandler) AssignTaskToChild(c *fiber.Ctx) error {
 	canAssign := false
 	if taskDefinition.CreatedByUserID == parentID {
 		canAssign = true // Parent adalah pembuatnya
-		fmt.Println("---------------------------------------")
 	} else {
-		zlog.Debug().Int("CheckingSharedChild_Parent1", parentID).Int("CheckingSharedChild_Parent2", taskDefinition.CreatedByUserID).Msg("Calling HasSharedChild")
 		hasSharedChild, errCheckShared := h.UserRelRepo.HasSharedChild(ctx, parentID, taskDefinition.CreatedByUserID)
-		zlog.Debug().Bool("HasSharedChildResult", hasSharedChild).Err(errCheckShared).Msg("Result from HasSharedChild")
 		// Cek apakah ada anak bersama antara parent ini dan pembuat task
 		// hasSharedChild, errCheckShared := h.UserRelRepo.HasSharedChild(ctx, parentID, taskDefinition.CreatedByUserID)
-		fmt.Println("++++++++++++++++++++++++++++++++++++++++++++++")
 		if errCheckShared != nil {
 			// Error saat cek relasi keluarga, sebaiknya gagalkan
 			zlog.Error().Err(errCheckShared).Int("assigning_parent", parentID).Int("task_creator", taskDefinition.CreatedByUserID).Msg("Handler: Error checking for shared child during task assignment authorization")
 			return handleParentError(c, errCheckShared, "AssignTaskToChild - Check Shared Child")
 		}
 		if hasSharedChild {
-			fmt.Println("????????????????????????????????????????????")
 			canAssign = true // Boleh assign karena punya anak bersama
 		}
 	}
 
 	if !canAssign {
-		fmt.Println("XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX")
 		zlog.Warn().Int("parent_id", parentID).Int("task_id", input.TaskID).Int("creator_id", taskDefinition.CreatedByUserID).Msg("Handler: Parent forbidden from assigning task created by another unrelated parent")
 		return c.Status(fiber.StatusForbidden).JSON(models.Response{
 			Success: false,
@@ -635,15 +628,16 @@ func (h *ParentHandler) AssignTaskToChild(c *fiber.Ctx) error {
 // @Summary Verify Submitted Task
 // @Description Verifies a task submitted by a child, approving or rejecting it as a parent.
 // @Tags Parent - Tasks
+// @Accept json
 // @Produce json
 // @Param userTaskId path int true "UserTask ID to verify"
-// @Param status body string true "New status for the task (approved or rejected)"
+// @Param verify_input body models.VerifyTaskInput true "New status for the task (e.g., {\"status\": \"approved\"})"
 // @Success 200 {object} models.Response "Task verified successfully"
-// @Failure 400 {object} models.Response "Invalid UserTask ID or status"
+// @Failure 400 {object} models.Response "Invalid UserTask ID, status, or request body"
 // @Failure 401 {object} models.Response "Unauthorized"
-// @Failure 403 {object} models.Response "Forbidden (Not authorized to verify this task)"
-// @Failure 404 {object} models.Response "Task not found"
-// @Failure 500 {object} models.Response "Internal server error"
+// @Failure 403 {object} models.Response "Forbidden (Not authorized to verify this task, or task not in 'submitted' state)"
+// @Failure 404 {object} models.Response "Task assignment not found"
+// @Failure 500 {object} models.Response "Internal server error (e.g., point update failed)"
 // @Security ApiKeyAuth
 // @Router /parent/tasks/{userTaskId}/verify [patch]
 func (h *ParentHandler) VerifySubmittedTask(c *fiber.Ctx) error {
@@ -658,11 +652,9 @@ func (h *ParentHandler) VerifySubmittedTask(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(models.Response{Success: false, Message: "Invalid UserTask ID parameter"})
 	}
 
-	// 1. Parse input (new status)
-	var input struct {
-		Status string `json:"status" validate:"required,oneof=approved rejected"`
-	}
-	if err := c.BodyParser(&input); err != nil {
+	// 1. Parse input (new status) using the defined struct
+	input := new(models.VerifyTaskInput)
+	if err := c.BodyParser(input); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(models.Response{Success: false, Message: "Invalid request body"})
 	}
 	if err := h.Validate.Struct(input); err != nil {
@@ -973,11 +965,12 @@ func (h *ParentHandler) DeleteMyRewardDefinition(c *fiber.Ctx) error {
 // @Accept json
 // @Produce json
 // @Param claimId path int true "UserReward Claim ID"
-// @Param review_input body map[string]string true "Review Input (e.g., {\"status\": \"approved\"} or {\"status\": \"rejected\"})"
+// @Param review_input body models.ReviewClaimInput true "Review Input (e.g., {\"status\": \"approved\"})"
 // @Success 200 {object} models.Response "Claim review successful"
-// @Failure 400 {object} models.Response "Invalid input or Claim ID"
+// @Failure 400 {object} models.Response "Invalid input, Claim ID, or status"
 // @Failure 401 {object} models.Response "Unauthorized"
-// @Failure 403 {object} models.Response "Forbidden (Not parent or claim not pending)"
+// @Failure 402 {object} models.Response "Insufficient points (if approving)"
+// @Failure 403 {object} models.Response "Forbidden (Not parent, claim not pending, or other authorization issue)"
 // @Failure 404 {object} models.Response "Claim not found"
 // @Failure 500 {object} models.Response "Internal server error (e.g., point update failed)"
 // @Security ApiKeyAuth
@@ -994,10 +987,9 @@ func (h *ParentHandler) ReviewRewardClaim(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(models.Response{Success: false, Message: "Invalid Claim ID parameter"})
 	}
 
-	var input struct {
-		Status string `json:"status" validate:"required,oneof=approved rejected"`
-	}
-	if err := c.BodyParser(&input); err != nil {
+	// Parse input using the defined struct
+	input := new(models.ReviewClaimInput)
+	if err := c.BodyParser(input); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(models.Response{Success: false, Message: "Invalid request body"})
 	}
 	if err := h.Validate.Struct(input); err != nil {

@@ -140,8 +140,9 @@ func (h *AdminHandler) GetUserByID(c *fiber.Ctx) error {
 // @Param userId path int true "User ID"
 // @Param update_user body models.AdminUpdateUserInput true "User details"
 // @Success 200 {object} models.Response "User updated successfully"
-// @Failure 400 {object} models.Response "Validation failed or invalid request body"
+// @Failure 400 {object} models.Response "Validation failed, invalid request body, or invalid Role ID provided"
 // @Failure 404 {object} models.Response "User not found"
+// @Failure 409 {object} models.Response "Username or Email already exists"
 // @Failure 500 {object} models.Response "Internal server error during user update"
 // @Security ApiKeyAuth
 // @Router /admin/users/{userId} [patch]
@@ -257,6 +258,7 @@ func (h *AdminHandler) UpdateUser(c *fiber.Ctx) error {
 // @Failure 401 {object} models.Response "Unauthorized"
 // @Failure 403 {object} models.Response "Forbidden (Not Admin or attempting self-delete)"
 // @Failure 404 {object} models.Response "User not found"
+// @Failure 409 {object} models.Response "Conflict (User has existing related records)"
 // @Failure 500 {object} models.Response "Internal server error"
 // @Security ApiKeyAuth
 // @Router /admin/users/{userId} [delete]
@@ -335,7 +337,7 @@ func (h *AdminHandler) DeleteUser(c *fiber.Ctx) error {
 // @Accept json
 // @Produce json
 // @Param create_role body models.Role true "Role details"
-// @Success 201 {object} models.Response{data=int} "Role created successfully, returns role ID"
+// @Success 201 {object} models.Response{data=map[string]int} "Role created successfully, returns role ID"
 // @Failure 400 {object} models.Response "Validation failed or invalid request body"
 // @Failure 409 {object} models.Response "Role with same name already exists"
 // @Failure 500 {object} models.Response "Internal server error during role creation"
@@ -480,6 +482,7 @@ func (h *AdminHandler) GetRoleByID(c *fiber.Ctx) error {
 // @Success 200 {object} models.Response "Role updated successfully"
 // @Failure 400 {object} models.Response "Validation failed or invalid request body"
 // @Failure 404 {object} models.Response "Role not found"
+// @Failure 409 {object} models.Response "Role name already exists"
 // @Failure 500 {object} models.Response "Internal server error during role update"
 // @Security ApiKeyAuth
 // @Router /admin/roles/{roleId} [patch]
@@ -565,6 +568,7 @@ func (h *AdminHandler) UpdateRole(c *fiber.Ctx) error {
 // @Failure 400 {object} models.Response "Invalid Role ID parameter"
 // @Failure 403 {object} models.Response "Cannot delete base roles (Admin/Child)"
 // @Failure 404 {object} models.Response "Role not found"
+// @Failure 409 {object} models.Response "Conflict (Role is still assigned to users)"
 // @Failure 500 {object} models.Response "Internal server error during role deletion"
 // @Security ApiKeyAuth
 // @Router /admin/roles/{roleId} [delete]

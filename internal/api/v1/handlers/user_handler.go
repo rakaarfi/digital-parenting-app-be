@@ -36,7 +36,9 @@ func NewUserHandler(
 // @Param update_profile_input body models.UpdateProfileInput true "Profile update information"
 // @Success 200 {object} models.Response "Profile updated successfully"
 // @Failure 400 {object} models.Response "Validation failed or invalid request body"
-// @Failure 401 {object} models.Response "Failed to identify user"
+// @Failure 401 {object} models.Response "Unauthorized: Invalid token"
+// @Failure 404 {object} models.Response "User not found"
+// @Failure 409 {object} models.Response "Username or Email already exists"
 // @Failure 500 {object} models.Response "Internal server error during profile update"
 // @Security ApiKeyAuth
 // @Router /user/profile [patch]
@@ -102,7 +104,8 @@ func (h *UserHandler) UpdateMyProfile(c *fiber.Ctx) error {
 // @Param update_password body models.UpdatePasswordInput true "Password Update Details"
 // @Success 200 {object} models.Response "Password updated successfully"
 // @Failure 400 {object} models.Response "Validation failed or invalid request body"
-// @Failure 401 {object} models.Response "Invalid old password"
+// @Failure 401 {object} models.Response "Unauthorized: Invalid token or incorrect old password"
+// @Failure 404 {object} models.Response "User not found"
 // @Failure 500 {object} models.Response "Internal server error during password update"
 // @Security ApiKeyAuth
 // @Router /user/password [patch]
@@ -166,8 +169,8 @@ func (h *UserHandler) UpdateMyPassword(c *fiber.Ctx) error {
 // @Tags User - Profile Management
 // @Produce json
 // @Success 200 {object} models.Response{data=map[string]interface{}} "Profile data for current user"
-// @Failure 400 {object} models.Response "Validation failed or invalid request body"
-// @Failure 401 {object} models.Response "Failed to identify user"
+// @Failure 401 {object} models.Response "Unauthorized: Invalid token"
+// @Failure 404 {object} models.Response "User profile not found"
 // @Failure 500 {object} models.Response "Internal server error during profile retrieval"
 // @Security ApiKeyAuth
 // @Router /user/profile [get]

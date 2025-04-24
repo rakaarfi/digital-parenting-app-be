@@ -9,15 +9,15 @@ const docTemplate = `{
     "info": {
         "description": "{{escape .Description}}",
         "title": "{{.Title}}",
-        "termsOfService": "http://swagger.io/terms/",
+        "termsOfService": "http://swagger.io/terms/ # Optional: Update or remove",
         "contact": {
-            "name": "API Support",
-            "url": "http://www.swagger.io/support",
-            "email": "support@swagger.io"
+            "name": "API Support # Optional: Update or remove",
+            "url": "http://www.swagger.io/support # Optional: Update or remove",
+            "email": "support@swagger.io # Optional: Update or remove"
         },
         "license": {
-            "name": "Apache 2.0",
-            "url": "http://www.apache.org/licenses/LICENSE-2.0.html"
+            "name": "MIT License",
+            "url": "https://opensource.org/licenses/MIT"
         },
         "version": "{{.Version}}"
     },
@@ -112,7 +112,10 @@ const docTemplate = `{
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "type": "integer"
+                                            "type": "object",
+                                            "additionalProperties": {
+                                                "type": "integer"
+                                            }
                                         }
                                     }
                                 }
@@ -257,6 +260,12 @@ const docTemplate = `{
                             "$ref": "#/definitions/models.Response"
                         }
                     },
+                    "409": {
+                        "description": "Conflict (Role is still assigned to users)",
+                        "schema": {
+                            "$ref": "#/definitions/models.Response"
+                        }
+                    },
                     "500": {
                         "description": "Internal server error during role deletion",
                         "schema": {
@@ -315,6 +324,12 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "Role not found",
+                        "schema": {
+                            "$ref": "#/definitions/models.Response"
+                        }
+                    },
+                    "409": {
+                        "description": "Role name already exists",
                         "schema": {
                             "$ref": "#/definitions/models.Response"
                         }
@@ -521,6 +536,12 @@ const docTemplate = `{
                             "$ref": "#/definitions/models.Response"
                         }
                     },
+                    "409": {
+                        "description": "Conflict (User has existing related records)",
+                        "schema": {
+                            "$ref": "#/definitions/models.Response"
+                        }
+                    },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
@@ -572,13 +593,19 @@ const docTemplate = `{
                         }
                     },
                     "400": {
-                        "description": "Validation failed or invalid request body",
+                        "description": "Validation failed, invalid request body, or invalid Role ID provided",
                         "schema": {
                             "$ref": "#/definitions/models.Response"
                         }
                     },
                     "404": {
                         "description": "User not found",
+                        "schema": {
+                            "$ref": "#/definitions/models.Response"
+                        }
+                    },
+                    "409": {
+                        "description": "Username or Email already exists",
                         "schema": {
                             "$ref": "#/definitions/models.Response"
                         }
@@ -1725,6 +1752,9 @@ const docTemplate = `{
                     }
                 ],
                 "description": "Assigns a task definition created by the logged-in parent to a specific child user.",
+                "consumes": [
+                    "application/json"
+                ],
                 "produces": [
                     "application/json"
                 ],
@@ -1741,24 +1771,39 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "description": "Task Definition ID to assign",
-                        "name": "task_id",
+                        "description": "Task Definition ID to assign (e.g., {\\",
+                        "name": "assign_task_input",
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "type": "integer"
+                            "$ref": "#/definitions/models.AssignTaskInput"
                         }
                     }
                 ],
                 "responses": {
-                    "200": {
-                        "description": "Task assigned to child successfully",
+                    "201": {
+                        "description": "Task assigned to child successfully, returns user_task_id",
                         "schema": {
-                            "$ref": "#/definitions/models.Response"
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/models.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "object",
+                                            "additionalProperties": {
+                                                "type": "integer"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
                         }
                     },
                     "400": {
-                        "description": "Invalid Child ID or Task ID parameter",
+                        "description": "Invalid Child ID, Task ID, or request body",
                         "schema": {
                             "$ref": "#/definitions/models.Response"
                         }
@@ -1770,7 +1815,7 @@ const docTemplate = `{
                         }
                     },
                     "403": {
-                        "description": "Forbidden (Not the parent)",
+                        "description": "Forbidden (Not the parent, or not authorized for this task definition)",
                         "schema": {
                             "$ref": "#/definitions/models.Response"
                         }
@@ -1782,7 +1827,7 @@ const docTemplate = `{
                         }
                     },
                     "409": {
-                        "description": "Conflict (Task is already assigned to child)",
+                        "description": "Conflict (Task is already assigned/submitted and active for this child)",
                         "schema": {
                             "$ref": "#/definitions/models.Response"
                         }
@@ -1881,10 +1926,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/models.ReviewClaimInput"
                         }
                     }
                 ],
@@ -1896,7 +1938,7 @@ const docTemplate = `{
                         }
                     },
                     "400": {
-                        "description": "Invalid input or Claim ID",
+                        "description": "Invalid input, Claim ID, or status",
                         "schema": {
                             "$ref": "#/definitions/models.Response"
                         }
@@ -1907,8 +1949,14 @@ const docTemplate = `{
                             "$ref": "#/definitions/models.Response"
                         }
                     },
+                    "402": {
+                        "description": "Insufficient points (if approving)",
+                        "schema": {
+                            "$ref": "#/definitions/models.Response"
+                        }
+                    },
                     "403": {
-                        "description": "Forbidden (Not parent or claim not pending)",
+                        "description": "Forbidden (Not parent, claim not pending, or other authorization issue)",
                         "schema": {
                             "$ref": "#/definitions/models.Response"
                         }
@@ -2539,6 +2587,9 @@ const docTemplate = `{
                     }
                 ],
                 "description": "Verifies a task submitted by a child, approving or rejecting it as a parent.",
+                "consumes": [
+                    "application/json"
+                ],
                 "produces": [
                     "application/json"
                 ],
@@ -2555,12 +2606,12 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "description": "New status for the task (approved or rejected)",
-                        "name": "status",
+                        "description": "New status for the task (e.g., {\\",
+                        "name": "verify_input",
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "type": "string"
+                            "$ref": "#/definitions/models.VerifyTaskInput"
                         }
                     }
                 ],
@@ -2572,7 +2623,7 @@ const docTemplate = `{
                         }
                     },
                     "400": {
-                        "description": "Invalid UserTask ID or status",
+                        "description": "Invalid UserTask ID, status, or request body",
                         "schema": {
                             "$ref": "#/definitions/models.Response"
                         }
@@ -2584,19 +2635,19 @@ const docTemplate = `{
                         }
                     },
                     "403": {
-                        "description": "Forbidden (Not authorized to verify this task)",
+                        "description": "Forbidden (Not authorized to verify this task, or task not in 'submitted' state)",
                         "schema": {
                             "$ref": "#/definitions/models.Response"
                         }
                     },
                     "404": {
-                        "description": "Task not found",
+                        "description": "Task assignment not found",
                         "schema": {
                             "$ref": "#/definitions/models.Response"
                         }
                     },
                     "500": {
-                        "description": "Internal server error",
+                        "description": "Internal server error (e.g., point update failed)",
                         "schema": {
                             "$ref": "#/definitions/models.Response"
                         }
@@ -2647,7 +2698,13 @@ const docTemplate = `{
                         }
                     },
                     "401": {
-                        "description": "Invalid old password",
+                        "description": "Unauthorized: Invalid token or incorrect old password",
+                        "schema": {
+                            "$ref": "#/definitions/models.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "User not found",
                         "schema": {
                             "$ref": "#/definitions/models.Response"
                         }
@@ -2696,14 +2753,14 @@ const docTemplate = `{
                             ]
                         }
                     },
-                    "400": {
-                        "description": "Validation failed or invalid request body",
+                    "401": {
+                        "description": "Unauthorized: Invalid token",
                         "schema": {
                             "$ref": "#/definitions/models.Response"
                         }
                     },
-                    "401": {
-                        "description": "Failed to identify user",
+                    "404": {
+                        "description": "User profile not found",
                         "schema": {
                             "$ref": "#/definitions/models.Response"
                         }
@@ -2758,7 +2815,19 @@ const docTemplate = `{
                         }
                     },
                     "401": {
-                        "description": "Failed to identify user",
+                        "description": "Unauthorized: Invalid token",
+                        "schema": {
+                            "$ref": "#/definitions/models.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "User not found",
+                        "schema": {
+                            "$ref": "#/definitions/models.Response"
+                        }
+                    },
+                    "409": {
+                        "description": "Username or Email already exists",
                         "schema": {
                             "$ref": "#/definitions/models.Response"
                         }
@@ -2837,6 +2906,17 @@ const docTemplate = `{
                     "type": "string",
                     "maxLength": 100,
                     "minLength": 3
+                }
+            }
+        },
+        "models.AssignTaskInput": {
+            "type": "object",
+            "required": [
+                "task_id"
+            ],
+            "properties": {
+                "task_id": {
+                    "type": "integer"
                 }
             }
         },
@@ -2945,6 +3025,21 @@ const docTemplate = `{
                 },
                 "success": {
                     "type": "boolean"
+                }
+            }
+        },
+        "models.ReviewClaimInput": {
+            "type": "object",
+            "required": [
+                "status"
+            ],
+            "properties": {
+                "status": {
+                    "type": "string",
+                    "enum": [
+                        "approved",
+                        "rejected"
+                    ]
                 }
             }
         },
@@ -3118,6 +3213,21 @@ const docTemplate = `{
                     "type": "string",
                     "maxLength": 100,
                     "minLength": 3
+                }
+            }
+        },
+        "models.VerifyTaskInput": {
+            "type": "object",
+            "required": [
+                "status"
+            ],
+            "properties": {
+                "status": {
+                    "type": "string",
+                    "enum": [
+                        "approved",
+                        "rejected"
+                    ]
                 }
             }
         },

@@ -200,6 +200,27 @@ type UpdateRewardInput struct {
 	RewardDescription string `json:"reward_description,omitempty"`
 }
 
+// --- Input Structs untuk Task Assignment ---
+
+// AssignTaskInput berisi data yang dibutuhkan untuk assign Task ke Child.
+type AssignTaskInput struct {
+	TaskID int `json:"task_id" validate:"required,gt=0"`
+}
+
+// --- Input Structs untuk Task Verification ---
+
+// VerifyTaskInput berisi data yang dibutuhkan untuk verify Task oleh Parent.
+type VerifyTaskInput struct {
+	Status string `json:"status" validate:"required,oneof=approved rejected"`
+}
+
+// --- Input Structs untuk Reward Claim Review ---
+
+// ReviewClaimInput berisi data yang dibutuhkan untuk review Reward Claim oleh Parent.
+type ReviewClaimInput struct {
+	Status string `json:"status" validate:"required,oneof=approved rejected"`
+}
+
 // Input untuk penyesuaian poin manual oleh Parent/Admin
 type AdjustPointsInput struct {
 	ChangeAmount int    `json:"change_amount" validate:"required,ne=0"`  // Harus ada, tidak boleh 0
