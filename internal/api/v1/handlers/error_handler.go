@@ -8,7 +8,6 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/rakaarfi/digital-parenting-app-be/internal/models"
 	"github.com/rs/zerolog/log"
-	// Import error spesifik jika perlu dicek (misal: validator.ValidationErrors)
 )
 
 // ErrorHandler custom untuk Fiber
