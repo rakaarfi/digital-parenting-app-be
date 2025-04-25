@@ -26,6 +26,10 @@ func NewAuthHandler(authService service.AuthService) *AuthHandler {
 	}
 }
 
+// ==========================================================
+// --- Register/Login ---
+// ==========================================================
+
 // Register godoc
 // @Summary Register New User
 // @Description Creates a new user account.
