@@ -109,7 +109,9 @@ func handleChildError(c *fiber.Ctx, err error, operation string) error {
 	return c.Status(fiber.StatusInternalServerError).JSON(models.Response{Success: false, Message: "An internal error occurred"})
 }
 
+// ==========================================================
 // --- Task Viewing & Submission ---
+// ==========================================================
 
 // GetMyTasks godoc
 // @Summary Get My Tasks
@@ -195,7 +197,9 @@ func (h *ChildHandler) SubmitMyTask(c *fiber.Ctx) error {
 	return c.Status(http.StatusOK).JSON(models.Response{Success: true, Message: "Task submitted successfully"})
 }
 
+// ==========================================================
 // --- Points & Rewards ---
+// ==========================================================
 
 // GetMyPoints godoc
 // @Summary Get My Points Balance
