@@ -433,11 +433,13 @@ func (r *userRewardRepo) UpdateClaimStatusTx(ctx context.Context, tx pgx.Tx, id 
               SET status = $1, reviewed_by_user_id = $2, reviewed_at = $3
               WHERE id = $4 AND status = $5`
 	reviewedAt := time.Now()
+	zlog.Debug().Str("query", query).Int("id", id).Str("newStatus", string(newStatus)).Int("reviewerID", reviewerID).Time("reviewedAt", reviewedAt).Str("expectedOldStatus", string(models.UserRewardStatusPending)).Msg("RepoTx: Executing UpdateClaimStatusTx") // Log detail
 	tag, err := tx.Exec(ctx, query, newStatus, reviewerID, reviewedAt, id, models.UserRewardStatusPending)
 	if err != nil {
 		// ... (handle error) ...
 		return fmt.Errorf("repoTx error updating claim status: %w", err)
 	}
+	zlog.Debug().Int64("rowsAffected", tag.RowsAffected()).Int("claimID", id).Msg("RepoTx: Result of UpdateClaimStatusTx execution") // Log hasil
 	if tag.RowsAffected() == 0 {
 		// ... (handle concurrency/status change) ...
 		// Query ulang status jika perlu
