@@ -2,20 +2,20 @@
 package handlers
 
 import (
-	"errors" // Import errors
+	"errors"
 	"fmt"
 
 	// Import fmt
 	"net/http"
 	"strconv"
-	"strings" // Import strings
+	"strings"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v2"
-	"github.com/jackc/pgx/v5" // Import pgx for ErrNoRows
+	"github.com/jackc/pgx/v5"
 	"github.com/rakaarfi/digital-parenting-app-be/internal/models"
 	"github.com/rakaarfi/digital-parenting-app-be/internal/repository"
-	"github.com/rakaarfi/digital-parenting-app-be/internal/service" // Import service
+	"github.com/rakaarfi/digital-parenting-app-be/internal/service"
 	"github.com/rakaarfi/digital-parenting-app-be/internal/utils"
 	zlog "github.com/rs/zerolog/log"
 )
@@ -108,7 +108,9 @@ func handleParentError(c *fiber.Ctx, err error, operation string) error {
 	return c.Status(fiber.StatusInternalServerError).JSON(models.Response{Success: false, Message: "An internal error occurred"})
 }
 
-// --- Child Management ---
+// ==========================================================
+// // --- Child Management ---
+// ==========================================================
 
 // GetMyChildren godoc
 // @Summary Get My Children
@@ -270,7 +272,9 @@ func (h *ParentHandler) RemoveChild(c *fiber.Ctx) error {
 	return c.Status(http.StatusOK).JSON(models.Response{Success: true, Message: "Child relationship removed successfully"})
 }
 
+// ==========================================================
 // --- Task Definition Management ---
+// ==========================================================
 
 // CreateTaskDefinition godoc
 // @Summary Create a new Task Definition
@@ -505,7 +509,9 @@ func (h *ParentHandler) DeleteMyTaskDefinition(c *fiber.Ctx) error {
 	return c.Status(http.StatusOK).JSON(models.Response{Success: true, Message: "Task definition deleted successfully"})
 }
 
+// ==========================================================
 // --- Task Assignment & Verification ---
+// ==========================================================
 
 // AssignTaskToChild godoc
 // @Summary Assign Task to Child
@@ -597,17 +603,17 @@ func (h *ParentHandler) AssignTaskToChild(c *fiber.Ctx) error {
 	//    Perlu metode baru di UserTaskRepository: CheckExistingActiveTask
 	activeTaskExists, errCheckActive := h.UserTaskRepo.CheckExistingActiveTask(ctx, childID, taskDefinition.ID)
 	if errCheckActive != nil {
-        // Error saat memeriksa, gagalkan request
-        zlog.Error().Err(errCheckActive).Int("child_id", childID).Int("task_id", taskDefinition.ID).Msg("Handler: Error checking for existing active task")
-        return handleParentError(c, errCheckActive, "AssignTaskToChild - Check Active Task")
+		// Error saat memeriksa, gagalkan request
+		zlog.Error().Err(errCheckActive).Int("child_id", childID).Int("task_id", taskDefinition.ID).Msg("Handler: Error checking for existing active task")
+		return handleParentError(c, errCheckActive, "AssignTaskToChild - Check Active Task")
 	}
 	if activeTaskExists {
-        // Jika sudah ada tugas aktif, kembalikan error Conflict
-        zlog.Warn().Int("child_id", childID).Int("task_id", taskDefinition.ID).Msg("Handler: Attempted to assign an already active task")
-        return c.Status(fiber.StatusConflict).JSON(models.Response{
-            Success: false,
-            Message: fmt.Sprintf("Task '%s' is already assigned or submitted for this child and needs to be completed or verified first.", taskDefinition.TaskName),
-        })
+		// Jika sudah ada tugas aktif, kembalikan error Conflict
+		zlog.Warn().Int("child_id", childID).Int("task_id", taskDefinition.ID).Msg("Handler: Attempted to assign an already active task")
+		return c.Status(fiber.StatusConflict).JSON(models.Response{
+			Success: false,
+			Message: fmt.Sprintf("Task '%s' is already assigned or submitted for this child and needs to be completed or verified first.", taskDefinition.TaskName),
+		})
 	}
 
 	// 6. Assign task (Karena sudah divalidasi)
@@ -726,7 +732,9 @@ func (h *ParentHandler) GetTasksForChild(c *fiber.Ctx) error {
 	return c.Status(http.StatusOK).JSON(response)
 }
 
+// ==========================================================
 // --- Reward Definition Management ---
+// ==========================================================
 
 // CreateRewardDefinition godoc
 // @Summary Create Reward Definition
@@ -956,7 +964,9 @@ func (h *ParentHandler) DeleteMyRewardDefinition(c *fiber.Ctx) error {
 	return c.Status(http.StatusOK).JSON(models.Response{Success: true, Message: "Reward definition deleted successfully"})
 }
 
+// ==========================================================
 // --- Reward Claim Review ---
+// ==========================================================
 
 // ReviewRewardClaim godoc
 // @Summary Review Reward Claim
@@ -1198,7 +1208,9 @@ func (h *ParentHandler) CreateChildAccount(c *fiber.Ctx) error {
 	})
 }
 
+// ==========================================================
 // --- Invitation Code Management ---
+// ==========================================================
 
 // GenerateInvitationCode godoc
 // @Summary Generate Invitation Code for Child
