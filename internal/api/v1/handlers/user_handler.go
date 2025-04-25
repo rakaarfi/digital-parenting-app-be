@@ -96,6 +96,7 @@ func (h *UserHandler) UpdateMyProfile(c *fiber.Ctx) error {
 	})
 }
 
+// UpdateMyPassword godoc
 // @Summary Update My Password
 // @Description Updates the current user's password.
 // @Tags User - Profile Management
