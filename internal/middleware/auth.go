@@ -5,96 +5,152 @@ import (
 	"strings" // Digunakan untuk perbandingan string case-insensitive (EqualFold)
 
 	"github.com/gofiber/fiber/v2"                                  // Framework Fiber
-	"github.com/rakaarfi/digital-parenting-app-be/internal/models" // Model untuk struktur Response
+	"github.com/rakaarfi/digital-parenting-app-be/internal/models" // Model untuk struktur Response standar
 	"github.com/rakaarfi/digital-parenting-app-be/internal/utils"  // Utilitas untuk JWT (ExtractToken, ValidateJWT, JwtClaims)
 	zlog "github.com/rs/zerolog/log"                               // Logger global Zerolog
 )
 
-// Protected adalah middleware Fiber yang memastikan sebuah request memiliki token JWT yang valid.
-// Middleware ini harus dijalankan *sebelum* handler atau middleware lain yang memerlukan
-// informasi user yang terautentikasi.
+// File ini berisi middleware yang berkaitan dengan autentikasi (memastikan pengguna valid)
+// dan otorisasi (memastikan pengguna memiliki hak akses yang sesuai).
+
+// ====================================================================================
+// Middleware: Protected (JWT Authentication)
+// ====================================================================================
+
+// Protected adalah middleware Fiber yang berfungsi untuk melindungi route.
+// Middleware ini memastikan bahwa request yang masuk memiliki token JWT yang valid
+// di header Authorization (format: "Bearer <token>").
+// Jika token valid, informasi pengguna (claims) akan disimpan di `c.Locals("user")`
+// untuk digunakan oleh handler atau middleware selanjutnya.
+// Jika token tidak ada atau tidak valid, request akan dihentikan dengan response 401 Unauthorized.
+//
+// Middleware ini harus dijalankan *sebelum* handler atau middleware lain yang
+// memerlukan data pengguna yang terautentikasi (seperti middleware Authorize).
 func Protected() fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		// --- 1. Ekstrak Token dari Header Authorization ---
-		// Mencari header "Authorization: Bearer <token>" dan mengambil bagian token-nya.
+		// --- Langkah 1: Ekstrak Token dari Header Authorization ---
 		tokenString := utils.ExtractToken(c)
 		if tokenString == "" {
-			// Jika token tidak ditemukan, log peringatan dan kirim response 401 Unauthorized.
-			zlog.Warn().Str("path", c.Path()).Str("ip", c.IP()).Msg("Protected route access attempt without token")
+			// Kasus: Header Authorization tidak ada atau tidak menggunakan format Bearer.
+			zlog.Warn().
+				Str("path", c.Path()).
+				Str("ip", c.IP()).
+				Msg("Protected route access attempt: Missing or malformed Authorization header")
 			return c.Status(fiber.StatusUnauthorized).JSON(models.Response{
-				Success: false, Message: "Unauthorized: Missing token",
+				Success: false, Message: "Unauthorized: Missing or invalid authentication token",
 			})
 		}
 
-		// --- 2. Validasi Token JWT ---
-		// Memverifikasi signature token, masa berlaku (expiry), dan mem-parsing claims.
+		// --- Langkah 2: Validasi Token JWT ---
+		// Memverifikasi signature, masa berlaku (expiry), dan mem-parsing claims dari token.
 		claims, err := utils.ValidateJWT(tokenString)
 		if err != nil {
-			// Jika token tidak valid (kadaluarsa, signature salah, format rusak), log error dan kirim 401.
-			zlog.Warn().Err(err).Str("path", c.Path()).Str("ip", c.IP()).Msg("Protected route access attempt with invalid token")
+			// Kasus: Token tidak valid (kadaluarsa, signature salah, format rusak, dll.).
+			zlog.Warn().
+				Err(err). // Sertakan detail error validasi JWT
+				Str("path", c.Path()).
+				Str("ip", c.IP()).
+				Msg("Protected route access attempt: Invalid JWT token")
 			return c.Status(fiber.StatusUnauthorized).JSON(models.Response{
-				Success: false, Message: "Unauthorized: Invalid token",
+				Success: false, Message: "Unauthorized: Invalid or expired token",
 			})
 		}
 
-		// --- 3. Simpan Claims ke Locals ---
+		// --- Langkah 3: Simpan Claims Pengguna ke Context Locals ---
 		// Jika token valid, simpan data claims (*utils.JwtClaims) ke dalam context request Fiber (c.Locals).
-		// Kunci "user" digunakan secara konvensi. Handler/middleware selanjutnya bisa mengambil data ini.
-		c.Locals("user", claims) // Menyimpan pointer ke JwtClaims
+		// Kunci "user" digunakan secara konvensi agar mudah diakses oleh komponen selanjutnya.
+		c.Locals("user", claims) // Menyimpan pointer ke struct JwtClaims
 
-		// --- 4. Lanjutkan ke Middleware/Handler Berikutnya ---
+		// --- Langkah 4: Lanjutkan ke Middleware/Handler Berikutnya ---
 		// Log level debug untuk menandakan autentikasi berhasil (hanya muncul jika LOG_LEVEL=debug).
-		zlog.Debug().Str("username", claims.Username).Int("user_id", claims.UserID).Str("role", claims.Role).Msg("JWT authenticated, proceeding")
-		return c.Next() // Lanjutkan ke proses selanjutnya dalam rantai middleware/handler.
+		zlog.Debug().
+			Str("username", claims.Username).
+			Int("user_id", claims.UserID).
+			Str("role", claims.Role).
+			Str("path", c.Path()).
+			Msg("JWT authentication successful, proceeding to next handler/middleware")
+
+		// Melanjutkan eksekusi ke middleware atau handler selanjutnya dalam rantai.
+		return c.Next()
 	}
 }
 
-// Authorize adalah middleware Fiber yang memeriksa apakah user yang terautentikasi
-// memiliki salah satu role yang diizinkan untuk mengakses suatu route.
-// Middleware ini WAJIB dijalankan *setelah* middleware Protected() agar claims user sudah ada di c.Locals.
+// ====================================================================================
+// Middleware: Authorize (Role-Based Authorization)
+// ====================================================================================
+
+// Authorize adalah middleware Fiber yang berfungsi untuk membatasi akses ke route
+// berdasarkan peran (role) pengguna yang terautentikasi.
+// Middleware ini memeriksa apakah peran pengguna (yang didapat dari claims JWT)
+// termasuk dalam daftar peran yang diizinkan (`allowedRoles`).
+//
+// PENTING: Middleware ini WAJIB dijalankan *setelah* middleware `Protected()`
+// karena memerlukan data claims pengguna yang sudah disimpan di `c.Locals("user")`.
+//
+// Jika peran pengguna diizinkan, request akan dilanjutkan ke handler berikutnya.
+// Jika tidak diizinkan, request akan dihentikan dengan response 403 Forbidden.
 //
 // Parameter:
-//   - allowedRoles: Daftar string nama role yang diizinkan (varargs).
+//   - allowedRoles: Daftar string nama peran yang diizinkan mengakses route ini (varargs).
+//     Perbandingan peran dilakukan secara case-insensitive.
 func Authorize(allowedRoles ...string) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		// --- 1. Ambil Claims User dari Locals ---
-		// Mengambil data claims (*utils.JwtClaims) yang sebelumnya disimpan oleh middleware Protected().
-		// Melakukan type assertion untuk memastikan tipenya benar.
-		claims, ok := c.Locals("user").(*utils.JwtClaims)
-		if !ok {
-			// Jika claims tidak ditemukan atau tipenya salah (seharusnya tidak terjadi jika Protected() jalan duluan),
-			// log error kritis dan kirim response 403 Forbidden.
-			// Status 500 mungkin juga bisa dipertimbangkan karena ini menandakan kesalahan konfigurasi middleware.
-			zlog.Error().Str("path", c.Path()).Str("ip", c.IP()).Msg("User claims not found in context during authorization. Ensure Protected middleware runs first.")
-			return c.Status(fiber.StatusForbidden).JSON(models.Response{
-				Success: false, Message: "Forbidden: Cannot determine user role",
+		// --- Langkah 1: Ambil Claims Pengguna dari Context Locals ---
+		// Mengambil data claims (*utils.JwtClaims) yang seharusnya sudah disimpan oleh `Protected()`.
+		userClaims, ok := c.Locals("user").(*utils.JwtClaims)
+		if !ok || userClaims == nil {
+			// Kasus: Claims tidak ditemukan atau tipenya salah. Ini mengindikasikan kesalahan
+			// urutan middleware (Protected() tidak dijalankan sebelumnya).
+			zlog.Error().
+				Str("path", c.Path()).
+				Str("ip", c.IP()).
+				Msg("Authorization middleware error: User claims not found in context. Ensure Protected() runs first.")
+			// Mengembalikan 500 Internal Server Error karena ini masalah konfigurasi server.
+			return c.Status(fiber.StatusInternalServerError).JSON(models.Response{
+				Success: false, Message: "Internal Server Error: User context unavailable for authorization",
 			})
 		}
 
-		// --- 2. Periksa Role User ---
-		// Iterasi melalui daftar role yang diizinkan (allowedRoles).
+		// --- Langkah 2: Periksa Kecocokan Peran Pengguna ---
 		isAllowed := false
-		for _, role := range allowedRoles {
-			// Membandingkan role user (dari claims JWT) dengan role yang diizinkan.
-			// strings.EqualFold digunakan untuk perbandingan case-insensitive (misal: "Admin" == "admin").
-			if strings.EqualFold(claims.Role, role) {
-				isAllowed = true // Jika cocok, set flag true dan hentikan loop.
+		userRole := userClaims.Role // Peran pengguna dari token JWT
+		for _, allowedRole := range allowedRoles {
+			// Membandingkan peran pengguna dengan setiap peran yang diizinkan.
+			// `strings.EqualFold` melakukan perbandingan case-insensitive (misal: "Admin" cocok dengan "admin").
+			if strings.EqualFold(userRole, allowedRole) {
+				isAllowed = true // Jika ditemukan kecocokan, tandai sebagai diizinkan dan keluar dari loop.
 				break
 			}
 		}
 
-		// --- 3. Tolak Akses Jika Role Tidak Sesuai ---
+		// --- Langkah 3: Proses Hasil Pemeriksaan Peran ---
 		if !isAllowed {
-			// Jika role user tidak ada dalam daftar yang diizinkan, log peringatan dan kirim 403 Forbidden.
-			zlog.Warn().Str("username", claims.Username).Int("user_id", claims.UserID).Str("user_role", claims.Role).Strs("required_roles", allowedRoles).Str("path", c.Path()).Msg("Authorization failed: User role not permitted")
+			// Kasus: Peran pengguna tidak termasuk dalam daftar peran yang diizinkan.
+			zlog.Warn().
+				Str("username", userClaims.Username).
+				Int("user_id", userClaims.UserID).
+				Str("user_role", userRole).
+				Strs("required_roles", allowedRoles). // Log peran yang dibutuhkan
+				Str("path", c.Path()).
+				Str("ip", c.IP()).
+				Msg("Authorization failed: User role not permitted for this route")
+			// Mengembalikan 403 Forbidden karena pengguna terautentikasi tetapi tidak punya hak akses.
 			return c.Status(fiber.StatusForbidden).JSON(models.Response{
-				Success: false, Message: "Forbidden: Insufficient privileges",
+				Success: false, Message: "Forbidden: You do not have sufficient privileges to access this resource",
 			})
 		}
 
-		// --- 4. Izinkan Akses Jika Role Sesuai ---
-		// Jika user memiliki role yang diizinkan, log debug dan lanjutkan ke handler berikutnya.
-		zlog.Debug().Str("username", claims.Username).Str("role", claims.Role).Msg("Authorization successful, proceeding")
+		// --- Langkah 4: Lanjutkan Jika Peran Diizinkan ---
+		// Log level debug untuk menandakan otorisasi berhasil.
+		zlog.Debug().
+			Str("username", userClaims.Username).
+			Int("user_id", userClaims.UserID).
+			Str("role", userRole).
+			Strs("allowed_roles", allowedRoles).
+			Str("path", c.Path()).
+			Msg("Authorization successful, proceeding to next handler")
+
+		// Melanjutkan eksekusi ke handler atau middleware selanjutnya.
 		return c.Next()
 	}
 }
