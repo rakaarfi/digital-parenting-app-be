@@ -29,7 +29,7 @@ func ErrorHandler(ctx *fiber.Ctx, err error) error {
 	if errors.As(err, &ve) {
 		code = fiber.StatusBadRequest
 		// Format pesan error validasi
-		message = "Validation Failed" // Atau buat pesan yg lebih detail
+		message = "Validation Failed"
 	}
 
 	// Log error dengan zerolog (sebelumnya sudah dilog oleh middleware, tapi ini untuk detail)

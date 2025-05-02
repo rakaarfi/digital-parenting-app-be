@@ -15,7 +15,7 @@ import (
 )
 
 type AuthHandler struct {
-	AuthService service.AuthService // Ganti repo dengan service
+	AuthService service.AuthService
 	Validate    *validator.Validate
 }
 

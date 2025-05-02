@@ -24,10 +24,10 @@ type ParentHandler struct {
 	// --- Repositories (untuk CRUD sederhana) ---
 	UserRelRepo    repository.UserRelationshipRepository
 	TaskRepo       repository.TaskRepository
-	UserTaskRepo   repository.UserTaskRepository // Mungkin masih perlu untuk Get?
+	UserTaskRepo   repository.UserTaskRepository
 	RewardRepo     repository.RewardRepository
-	UserRewardRepo repository.UserRewardRepository       // Mungkin masih perlu untuk Get?
-	PointRepo      repository.PointTransactionRepository // Mungkin masih perlu untuk Get?
+	UserRewardRepo repository.UserRewardRepository
+	PointRepo      repository.PointTransactionRepository
 	UserRepo       repository.UserRepository
 
 	// --- Services (untuk logika bisnis & transaksi) ---
@@ -48,8 +48,8 @@ func NewParentHandler(
 	userRewardRepo repository.UserRewardRepository,
 	pointRepo repository.PointTransactionRepository,
 	userRepo repository.UserRepository,
-	taskService service.TaskService, // Terima TaskService
-	rewardService service.RewardService, // Terima RewardService
+	taskService service.TaskService,
+	rewardService service.RewardService,
 	userService service.UserService,
 	invitationService service.InvitationService,
 ) *ParentHandler {
@@ -61,8 +61,8 @@ func NewParentHandler(
 		UserRewardRepo:    userRewardRepo,
 		PointRepo:         pointRepo,
 		UserRepo:          userRepo,
-		TaskService:       taskService,   // Simpan TaskService
-		RewardService:     rewardService, // Simpan RewardService
+		TaskService:       taskService,
+		RewardService:     rewardService,
 		UserService:       userService,
 		InvitationService: invitationService,
 		Validate:          validator.New(),
