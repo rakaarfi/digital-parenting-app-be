@@ -13,12 +13,14 @@ Backend API for a Digital Parenting application enabling parents to assign tasks
 - [Prerequisites](#prerequisites)
 - [Installation & Setup ⚙️](#installation--setup-️)
 - [Running the Application ▶](#running-the-application-)
+- [Running with Docker Compose (Recommended)](#running-with-docker-compose-recommended)
 - [API Documentation (Swagger)](#api-documentation-swagger)
 - [API Endpoints Overview](#api-endpoints-overview)
 - [Database Migrations](#database-migrations)
 - [Project Structure (Overview)](#project-structure-overview)
 - [Building the Application](#building-the-application)
-- [Linting & Formatting](#linting--formatting) <!-- - [Testing](#testing) -->
+- [Linting & Formatting](#linting--formatting)
+- [Testing](#testing)
 - [Contributing](#contributing)
 - [License](#license)
 
@@ -79,7 +81,7 @@ Before you begin, ensure your system has:
     # Example installation (check official docs for latest/other methods)
     go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
     ```
-4.  **(Optional) Docker & Docker Compose:** For running PostgreSQL in a container.
+4.  **Docker & Docker Compose (Recommended):** For easily running the application and PostgreSQL database in containers. [Install Docker](https://docs.docker.com/get-docker/)
 
 ## Installation & Setup ⚙️
 
@@ -156,6 +158,41 @@ go run cmd/api/main.go
 ```
 
 The server will start on the port specified in `APP_PORT` (default: 3001). You will see logs in the console (and in a file if enabled).
+
+### Running with Docker Compose (Recommended)
+
+This is the easiest way to get the application and its database running.
+
+1.  **Ensure Docker and Docker Compose are installed.**
+2.  **Create the `.env` file:** Copy `.env.example` to `.env` and configure it as described in the [Installation & Setup](#installation--setup-️) section. The `DB_HOST` should typically be the service name defined in `docker-compose.yml` (e.g., `postgres`).
+    ```bash
+    cp .env.example .env
+    # Edit .env with your settings, ensuring DB_HOST=postgres (or your service name)
+    ```
+3.  **Build and Start Containers:**
+    ```bash
+    docker-compose up --build -d
+    ```
+    *   `--build`: Forces Docker to rebuild the application image if the code has changed.
+    *   `-d`: Runs the containers in detached mode (in the background).
+4.  **Run Migrations (using Docker):** Once the containers are running, execute the migrations inside the running API container:
+    ```bash
+    # Replace <container_name_or_id> with the actual name/ID of your API service container (e.g., digital-parenting-app-be_api_1)
+    # You can find it using 'docker ps'
+    docker exec -it <container_name_or_id> migrate -database "$DATABASE_URL" -path /app/migrations up
+    # Note: $DATABASE_URL should be correctly set within the container's environment based on your .env file.
+    # Example DATABASE_URL: postgres://your_user:your_password@postgres:5432/your_db?sslmode=disable
+    ```
+    Alternatively, you can run migrations *before* starting the app container if preferred, using the `migrate` CLI pointed at the Dockerized database.
+5.  **Access the Application:** The API should be available at `http://localhost:<APP_PORT>` (e.g., `http://localhost:3001`).
+6.  **View Logs:**
+    ```bash
+    docker-compose logs -f api # Follow logs for the 'api' service
+    ```
+7.  **Stop Containers:**
+    ```bash
+    docker-compose down
+    ```
 
 ## API Documentation (Swagger) 
 
@@ -307,10 +344,18 @@ Consistent code style and quality are maintained using standard Go tools and `go
         ```
         This will use the configuration file `.golangci.yml` (if present) or default settings. Consider creating a `.golangci.yml` for project-specific rules.
 
+## Testing
 
-<!-- ## Testing -->
+Run all unit and integration tests in the project:
 
-<!-- *(TODO: Add instructions on how to run unit or integration tests if you implement them)* -->
+```bash
+go test ./... -v
+```
+
+*   `./...`: Recursively finds and runs tests in all subdirectories.
+*   `-v`: Enables verbose output, showing individual test results.
+
+*(Note: Ensure your test environment, including any necessary database setup or mocks, is configured correctly before running tests.)*
 
 ## Contributing 
 
